@@ -504,6 +504,65 @@ end
 
 # --- driver --------------------------------------------------------------
 
+# Stable counting sort of integer keys in `lo:hi`; returns the indices in
+# sorted order. Ties keep their original order, as `MergeSort` would.
+function _stable_order(keys::Vector{Int}, lo::Int, hi::Int)
+    counts = zeros(Int, hi - lo + 1)
+    for k in keys
+        counts[k-lo+1] += 1
+    end
+    position = 0
+    for i in eachindex(counts)
+        c = counts[i]
+        counts[i] = position
+        position += c
+    end
+    order = Vector{Int}(undef, length(keys))
+    for i in eachindex(keys)
+        p = counts[keys[i]-lo+1] + 1
+        order[p] = i
+        counts[keys[i]-lo+1] = p
+    end
+    return order
+end
+
+# `ordered_adjs[v]` sorted by nesting depth, ties in the original order. Two
+# stable counting passes (depth, then tail) replace a comparison sort per
+# vertex and keep the linear bound of the Left-Right test.
+function _order_out_adjs_by_depth!(st::_LRState)
+    n = length(st.out_adjs)
+    m = sum(length, st.out_adjs; init = 0)
+    m == 0 && return st
+    tails = Vector{Int}(undef, m)
+    heads = Vector{Int}(undef, m)
+    depths = Vector{Int}(undef, m)
+    lo = typemax(Int)
+    hi = typemin(Int)
+    i = 0
+    for v = 1:n
+        for w in st.out_adjs[v]
+            i += 1
+            depth = st.nesting_depth[(v, w)]
+            tails[i] = v
+            heads[i] = w
+            depths[i] = depth
+            lo = min(lo, depth)
+            hi = max(hi, depth)
+        end
+    end
+    by_depth = _stable_order(depths, lo, hi)
+    tails = tails[by_depth]
+    heads = heads[by_depth]
+    by_tail = _stable_order(tails, 1, n)
+    for v = 1:n
+        empty!(st.ordered_adjs[v])
+    end
+    for i in by_tail
+        push!(st.ordered_adjs[tails[i]], heads[i])
+    end
+    return st
+end
+
 function _rotation_system(adj::Vector{Vector{Int}})
     n = length(adj)
     m = sum(length, adj; init = 0) ÷ 2
@@ -518,10 +577,7 @@ function _rotation_system(adj::Vector{Vector{Int}})
         _dfs_orientation!(st, v)
     end
 
-    for v = 1:n
-        st.ordered_adjs[v] =
-            sort(st.out_adjs[v]; by = w -> st.nesting_depth[(v, w)], alg = MergeSort)
-    end
+    _order_out_adjs_by_depth!(st)
     for r in roots
         _dfs_testing!(st, r) || return nothing
     end
@@ -529,9 +585,8 @@ function _rotation_system(adj::Vector{Vector{Int}})
     for vw in st.oriented
         st.nesting_depth[vw] = _sign!(st, vw) * st.nesting_depth[vw]
     end
+    _order_out_adjs_by_depth!(st)
     for v = 1:n
-        st.ordered_adjs[v] =
-            sort(st.out_adjs[v]; by = w -> st.nesting_depth[(v, w)], alg = MergeSort)
         _initialize_rotation!(st.halves, v, st.ordered_adjs[v])
     end
     for r in roots

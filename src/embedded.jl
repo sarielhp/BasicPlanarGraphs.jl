@@ -400,3 +400,19 @@ function components_without(g::DartGraph, removed::AbstractVector{Bool})
     end
     return comps
 end
+
+# Labels are `1:n`, so a sorted copy of a subset is a mark-and-scan in `O(n)`,
+# not a comparison sort. Duplicates are removed, which is what every caller
+# wants from `sort` followed by `unique!`.
+function _sorted_ids(vertices::AbstractVector{Int}, n::Integer)
+    mask = falses(n)
+    for v in vertices
+        mask[v] = true
+    end
+    out = Int[]
+    sizehint!(out, length(vertices))
+    for v = 1:n
+        mask[v] && push!(out, v)
+    end
+    return out
+end

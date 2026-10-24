@@ -77,17 +77,33 @@ function _check_rotation(graph::SimpleGraph, rot::Vector{Vector{T}}) where {T}
     n = nv(graph)
     length(rot) == n ||
         throw(ArgumentError("rotation has $(length(rot)) entries for $n vertices"))
+    # A permutation check with stamps, not two sorts: mark the neighbours of
+    # `v`, consume each rotation entry, and leave `-v` behind so a repeat fails.
+    mark = zeros(Int, n)
     for v = 1:n
-        expected = sort!(collect(neighbors(graph, v)))
-        got = sort!(copy(rot[v]))
-        length(got) == length(expected) || throw(
+        rot_v = rot[v]
+        expected = degree(graph, v)
+        length(rot_v) == expected || throw(
             ArgumentError(
-                "rotation of vertex $v has $(length(got)) entries, expected $(length(expected))",
+                "rotation of vertex $v has $(length(rot_v)) entries, expected $expected",
             ),
         )
-        got == expected || throw(
-            ArgumentError("rotation of vertex $v is not a permutation of its neighbours"),
-        )
+        for w in neighbors(graph, v)
+            mark[w] = v
+        end
+        for w in rot_v
+            (1 <= w <= n) || throw(
+                ArgumentError(
+                    "rotation of vertex $v is not a permutation of its neighbours",
+                ),
+            )
+            mark[w] == v || throw(
+                ArgumentError(
+                    "rotation of vertex $v is not a permutation of its neighbours",
+                ),
+            )
+            mark[w] = -v
+        end
     end
     return nothing
 end

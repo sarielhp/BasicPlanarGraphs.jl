@@ -122,7 +122,7 @@ function _initial_separator(dg::DartGraph, root::Integer, balance::Real)
     best = base
     best_score = _largest_side(dg, base)
     for cycle in _band_cycles(dg, levels, l0, l2)
-        candidate = _merge_vertices(base, cycle)
+        candidate = _merge_vertices(base, cycle, n)
         score = _largest_side(dg, candidate)
         score <= balance * n && return candidate
         if score < best_score
@@ -152,7 +152,7 @@ function _refine(dg::DartGraph, removed::Vector{Int}, balance::Real, depth::Inte
     length(biggest) < 3 && return candidate
     sub, ids = induced(dg, _mask(biggest, n))
     _, _, extra = _separator_connected(sub, 1, balance, depth + 1)
-    merged = _merge_vertices(removed, Int[ids[v] for v in extra])
+    merged = _merge_vertices(removed, Int[ids[v] for v in extra], n)
     length(merged) == length(removed) && return candidate
     return _refine(dg, merged, balance, depth + 1)
 end
@@ -391,8 +391,25 @@ function _balanced_darts(adj::Vector{Vector{Tuple{Int,Int}}}, weights::Vector{In
         s = subtree[f]
         push!(ranked, (max(s, total - s), parent_dart[f]))
     end
-    sort!(ranked; by = first)
-    return Int[d for (_, d) in ranked]
+    # The keys are integers in 0:total, so a stable counting sort keeps the
+    # same order as the comparison sort in O(f + n) instead of O(f log f).
+    counts = zeros(Int, total + 1)
+    for (key, _) in ranked
+        counts[key+1] += 1
+    end
+    position = 0
+    for i in eachindex(counts)
+        c = counts[i]
+        counts[i] = position
+        position += c
+    end
+    out = Vector{Int}(undef, length(ranked))
+    for (key, d) in ranked
+        p = counts[key+1] + 1
+        out[p] = d
+        counts[key+1] = p
+    end
+    return out
 end
 
 function _candidate_cycles(
@@ -460,19 +477,41 @@ end
 
 # --- final partition -----------------------------------------------------
 
-function _merge_vertices(base::Vector{Int}, extra::Vector{Int})
-    isempty(extra) && return sort(copy(base))
-    merged = vcat(base, extra)
-    sort!(merged)
-    unique!(merged)
-    return merged
+function _merge_vertices(base::Vector{Int}, extra::Vector{Int}, n::Integer)
+    return _sorted_ids(vcat(base, extra), n)
+end
+
+# Components sorted by decreasing size, stable within a size. Counting over the
+# sizes is O(c + n); a comparison sort would be O(c log c).
+function _sort_components_by_size!(comps::Vector{Vector{Int}})
+    isempty(comps) && return comps
+    largest = maximum(length, comps)
+    counts = zeros(Int, largest + 1)
+    for comp in comps
+        counts[length(comp)+1] += 1
+    end
+    position = 0
+    for size = largest:-1:0
+        c = counts[size+1]
+        counts[size+1] = position
+        position += c
+    end
+    ordered = Vector{Vector{Int}}(undef, length(comps))
+    for comp in comps
+        size = length(comp)
+        p = counts[size+1] + 1
+        ordered[p] = comp
+        counts[size+1] = p
+    end
+    copyto!(comps, ordered)
+    return comps
 end
 
 # Partition `vertices(g) \\ separator` into connected components, then put the
 # components into two bins of nearly equal size.
 function _split_and_pack(dg::DartGraph, separator::Vector{Int})
     comps = components_without(dg, _mask(separator, dg.n))
-    sort!(comps; by = length, rev = true)
+    _sort_components_by_size!(comps)
     a = Int[]
     b = Int[]
     size_a = 0
@@ -486,7 +525,7 @@ function _split_and_pack(dg::DartGraph, separator::Vector{Int})
             size_b += length(comp)
         end
     end
-    return sort(a), sort(b), sort(separator)
+    return _sorted_ids(a, dg.n), _sorted_ids(b, dg.n), _sorted_ids(separator, dg.n)
 end
 
 _is_balanced(candidate, n::Integer, balance::Real) =
@@ -505,23 +544,34 @@ function _separator_disconnected(
     for v = 1:n
         push!(comps[label[v]], v)
     end
-    sort!(comps; by = length, rev = true)
+    _sort_components_by_size!(comps)
     biggest = comps[1]
     length(biggest) > balance * n && return _recurse_into_component(dg, comps, balance)
-    length(biggest) >= n / 3 && return (sort(biggest), _flatten(comps[2:end]), Int[])
+    if length(biggest) >= n / 3
+        return (_sorted_ids(biggest, n), _sorted_ids(_flatten(comps[2:end]), n), Int[])
+    end
     return _pack_components(comps, n)
 end
 
 function _recurse_into_component(dg::DartGraph, comps, balance::Real)
     sub, ids = induced(dg, _mask(comps[1], dg.n))
     a, b, c = _best_connected(sub, balance)
-    part_a = sort(Int[ids[v] for v in a])
-    part_b = sort(Int[ids[v] for v in b])
+    n = dg.n
+    part_a = _sorted_ids(Int[ids[v] for v in a], n)
+    part_b = _sorted_ids(Int[ids[v] for v in b], n)
     rest = _flatten(comps[2:end])
     if length(part_a) >= length(part_b)
-        return part_a, sort(vcat(part_b, rest)), sort(Int[ids[v] for v in c])
+        return (
+            part_a,
+            _sorted_ids(vcat(part_b, rest), n),
+            _sorted_ids(Int[ids[v] for v in c], n),
+        )
     end
-    return part_b, sort(vcat(part_a, rest)), sort(Int[ids[v] for v in c])
+    return (
+        part_b,
+        _sorted_ids(vcat(part_a, rest), n),
+        _sorted_ids(Int[ids[v] for v in c], n),
+    )
 end
 
 function _pack_components(comps, n::Integer)
@@ -535,7 +585,11 @@ function _pack_components(comps, n::Integer)
             break
         end
     end
-    return sort(_flatten(comps[1:cut])), sort(_flatten(comps[(cut+1):end])), Int[]
+    return (
+        _sorted_ids(_flatten(comps[1:cut]), n),
+        _sorted_ids(_flatten(comps[(cut+1):end]), n),
+        Int[],
+    )
 end
 
 function _flatten(comps)

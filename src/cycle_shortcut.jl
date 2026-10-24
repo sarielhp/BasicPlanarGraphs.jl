@@ -88,8 +88,7 @@ function _cycle_sides(g::DartGraph, orbits, face_of::Vector{Int}, cyc::Vector{In
         end
     end
     outside = Int[v for v = 1:g.n if !seen[v]]
-    sort!(inside)
-    return inside, outside
+    return _sorted_ids(inside, g.n), outside
 end
 
 # Replace the chords of a cycle of the triangulation by boundary paths of the

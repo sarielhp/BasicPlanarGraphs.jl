@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Internal ordering no longer uses comparison sorts. The Left-Right test orders
+  each vertex's outgoing darts by nesting depth with two stable counting passes,
+  the separator orders dual edges and components with counting sorts, and vertex
+  subsets are produced by a mark-and-scan over `1:nv`. `is_planar_linear`,
+  `planar_embedding`, `separator`, `cycle_sides` and rotation validation now meet
+  their documented `O(nv + ne)` bound.
+
+### Fixed
+
+- `separator` returns both sides sorted for disconnected graphs, as documented,
+  instead of leaving the smaller components in discovery order.
+
 ## [0.1.0] - 2026-10-24
 
 First release.
