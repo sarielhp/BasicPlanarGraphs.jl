@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Release numbering: v0.2.1 supersedes the withdrawn v0.2.0 tag. No functional
+  changes since v0.1.1.
+
 ## [0.1.1] - 2026-10-24
 
 ### Changed
