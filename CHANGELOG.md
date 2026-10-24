@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-24
+
 ### Changed
 
 - `cycle_separator` returns a closed walk of the input and no longer requires a
@@ -192,7 +194,8 @@ First release.
 - `Graphs` compatibility raised to `1.15`, the first release with
   `Graphs.is_planar`.
 
-[Unreleased]: https://github.com/sarielhp/BasicPlanarGraphs.jl/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/sarielhp/BasicPlanarGraphs.jl/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/sarielhp/BasicPlanarGraphs.jl/releases/tag/v0.2.3
 [0.2.2]: https://github.com/sarielhp/BasicPlanarGraphs.jl/releases/tag/v0.2.2
 [0.2.1]: https://github.com/sarielhp/BasicPlanarGraphs.jl/releases/tag/v0.2.1
 [0.1.1]: https://github.com/sarielhp/BasicPlanarGraphs.jl/releases/tag/v0.1.1
