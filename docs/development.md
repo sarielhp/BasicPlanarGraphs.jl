@@ -17,8 +17,8 @@ tools/gate --no-build  # .. without the build step
 
 | Step | Command | What it checks |
 |---|---|---|
-| audit | `julia-audit --strict --include-tests src test examples` | nesting ≤ 4, cognitive complexity ≤ 15, method tiers (80 / 120 lines), file size, argument count, idiom and trap rules |
-| static analysis | `julia-static-analysis src test examples` | every file parses, JuliaFormatter would change nothing, JET type inference, ExplicitImports |
+| audit | `julia-audit --strict --include-tests src test examples benchmark` | nesting ≤ 4, cognitive complexity ≤ 15, method tiers (80 / 120 lines), file size, argument count, idiom and trap rules |
+| static analysis | `julia-static-analysis src test examples benchmark` | every file parses, JuliaFormatter would change nothing, JET type inference, ExplicitImports |
 | examples | `examples/test_planarity.jl --graph … --sizes 10,all` | the planarity example runs end to end on a 13-vertex wheel written by the gate: read, planarity test, embedding, output, separator, verification |
 | tests | `Pkg.test()` | the suite below, including `Aqua.test_all` |
 | build | `tools/build` | the package still loads |
@@ -51,6 +51,8 @@ its generators.
 `examples/` is part of the checked code: the audit and the format check cover it,
 and `tools/gate` runs `examples/test_planarity.jl` on a 13-vertex wheel that the
 gate writes itself, so a broken example fails the gate without any network access.
+`benchmark/` is audited and format-checked the same way, but the gate never runs
+it, because its timings are machine-dependent.
 
 Two properties make the separator tests meaningful rather than circular:
 
@@ -98,6 +100,35 @@ Every separator is verified by the program itself (the three parts partition
 `1:n`, no edge joins `A` and `B`, and each side is within `2/3 n`), and every
 written embedding satisfies Euler's formula on every component. Peak resident
 memory for the whole run is about 4 GiB.
+
+## Benchmarks
+
+`benchmark/run.jl` compares the public entry points that the documentation calls
+linear on the same graph, and reports `separator`'s scaling separately. It is a
+diagnostic, not a gate: the timings are wall-clock and machine-dependent, so
+`tools/gate` and CI never run it. Methodology, the reference numbers and the
+interpretation live in [`benchmark/README.md`](../benchmark/README.md).
+
+```bash
+julia --project=. benchmark/run.jl --quick          # smoke test
+julia --project=. benchmark/run.jl                  # full survey
+julia --project=. benchmark/run.jl --suite=phases   # internals of separator
+```
+
+## Releases
+
+A release is a Git tag. The package is not registered in the General registry
+and there is no plan to register it for the foreseeable future; installation
+stays `Pkg.add(url = "https://github.com/sarielhp/BasicPlanarGraphs.jl")`.
+
+1. Set `version` in `Project.toml` and add the matching
+   `## [X.Y.Z] - YYYY-MM-DD` section to `CHANGELOG.md`.
+2. Run `tools/gate`.
+3. Commit, then create an annotated tag: `git tag -a vX.Y.Z -m "vX.Y.Z"`.
+4. `tools/push` pushes the branch; push the tag explicitly with
+   `git push origin vX.Y.Z`.
+
+CI never creates a tag, a GitHub release, or a registry entry.
 
 ## CI
 

@@ -23,12 +23,12 @@ for what that means in practice.
 | [Generators and triangulation](generators.md) | `planar_path`, `planar_cycle`, `planar_grid`, `planar_wheel`, `random_triangulation`, and `triangulate`. |
 | [Graph files](io.md) | The sectioned text format, `write_planar_graph`, `read_planar_graph`, `write_graph`, `read_graph`, and what is rejected. |
 | [API reference](api.md) | Every exported name, with signatures, return types, and errors. |
-| [Development](development.md) | Building, the quality gate (including the examples), the test suite, the planarity example on real data, and CI. |
+| [Development](development.md) | Building, the quality gate (including the examples), the test suite, the planarity example on real data, benchmarks, and CI. |
 
 ## Installation and quick start
 
-Requires Julia 1.10 or later. The package is not registered, so install it from
-the repository:
+Requires Julia 1.10 or later. The package is not registered in the General
+registry, so install it from the repository:
 
 ```julia
 using Pkg

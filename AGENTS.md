@@ -100,6 +100,16 @@ julia --project=. examples/test_planarity.jl            # 1000, 10000, 100000, a
 julia --project=. examples/test_planarity.jl --help
 ```
 
+## Releases
+
+- A release is a Git tag `vX.Y.Z` with a matching `version` in `Project.toml`
+  and a `CHANGELOG.md` section. `tools/push` pushes the branch only; push the tag
+  explicitly with `git push origin vX.Y.Z`.
+- **Do not register this package in the General registry**, and do not open a
+  registry PR, for the foreseeable future. Installation stays
+  `Pkg.add(url = "https://github.com/sarielhp/BasicPlanarGraphs.jl")`.
+- CI never creates tags or GitHub releases; the maintainer creates them by hand.
+
 ## Package notes
 
 - Public repository: <https://github.com/sarielhp/BasicPlanarGraphs.jl>, MIT licensed,

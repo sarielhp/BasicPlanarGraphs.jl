@@ -19,7 +19,7 @@ and iteration, not out of a human typing it.
 Please weigh that when you use it:
 
 - **The tests are the guarantee, not the prose.** Every claim in `docs/` should be
-  backable by a test or by a run of the example; the suite (1,500+ tests,
+  backable by a test or by a run of the example; the suite (9,400+ tests,
   including an independent `Graphs.jl`-based validator and a brute-force optimal
   separator oracle) is what is actually checked, and `tools/gate` runs it. Where
   a document and a test disagree, the test wins.
@@ -48,14 +48,14 @@ Full documentation lives in [`docs/`](docs/README.md):
 | [Generators and triangulation](docs/generators.md) | `planar_path`, `planar_cycle`, `planar_grid`, `planar_wheel`, `random_triangulation`, `triangulate` |
 | [Graph files](docs/io.md) | the sectioned text format, the writers and readers, what is rejected |
 | [API reference](docs/api.md) | every exported name with signatures, return types, and errors |
-| [Development](docs/development.md) | build, the quality gate, the test suite, CI |
+| [Development](docs/development.md) | build, the quality gate, the test suite, benchmarks, CI |
 
 Release history is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Installation
 
-Requires Julia 1.10 or later. The package is not registered yet, so install it
-from the repository:
+Requires Julia 1.10 or later. The package is not registered in the General
+registry, so install it from the repository:
 
 ```julia
 using Pkg

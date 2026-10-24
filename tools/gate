@@ -10,8 +10,8 @@
 # The steps are the Julia standard's package gate
 # (~/prog/standards/julia/GUIDELINES.md §8):
 #
-#   audit            julia-audit --strict --include-tests src test examples
-#   static analysis  julia-static-analysis src test examples  (syntax, format, JET, imports)
+#   audit            julia-audit --strict --include-tests src test examples benchmark
+#   static analysis  julia-static-analysis src test examples benchmark  (syntax, format, JET, imports)
 #   examples         examples/test_planarity.jl on a small local graph
 #   tests            Pkg.test()             (includes Aqua.test_all)
 #   build            tools/build            (once, after the checks pass)
@@ -78,8 +78,16 @@ at_exit { FileUtils.rm_rf(example_workdir) if @example_workdir }
 
 def steps(full:, build:)
   list = [
-    ["audit", ["julia-audit", "--strict", "--include-tests", "src", "test", "examples"], "julia-audit"],
-    ["static analysis", ["julia-static-analysis", "src", "test", "examples"], "julia-static-analysis"],
+    [
+      "audit",
+      ["julia-audit", "--strict", "--include-tests", "src", "test", "examples", "benchmark"],
+      "julia-audit",
+    ],
+    [
+      "static analysis",
+      ["julia-static-analysis", "src", "test", "examples", "benchmark"],
+      "julia-static-analysis",
+    ],
     ["examples", example_command, nil],
     ["tests", julia("using Pkg", "Pkg.test()"), nil],
   ]
