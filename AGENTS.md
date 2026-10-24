@@ -57,7 +57,7 @@ The project follows the review-cycle contract in
 | `tools/check` | Compatibility alias for `tools/gate` (a symlink). |
 | `tools/push` | `git push` and return; reports the run URL, never waits. |
 | `tools/check_ci` | Verdict of the latest Actions run: exit `0` green, `1` failed, `2` pending, `3` unknown. |
-| `tools/bump` | Cut a release: minor by default, changelog, gate, commit, tag, push, GitHub Release. |
+| `tools/bump` | Cut a release: third digit by default, changelog, gate, commit, tag, push, GitHub Release. |
 
 `tools/gate` is the entry point for "is this good"; `tools/build` for "does it load". A
 gate failure stops at the failing step and exits `1`; a missing tool exits `3`.
@@ -107,10 +107,10 @@ julia --project=. examples/test_planarity.jl --help
   `[Unreleased]` changelog entries under `## [X.Y.Z] - YYYY-MM-DD`, runs
   `tools/gate`, commits `release: vX.Y.Z`, creates the annotated tag, pushes the
   branch and tag, and creates the GitHub Release from those notes.
-- The default increment is **minor** (`0.1.0 -> 0.2.0`) while the package is
-  pre-1.0. Use `--patch` for fixes only; `--major` (1.0.0) is an explicit
-  decision. `--dry-run` prints the plan; `--no-push` stops after the local
-  commit and tag.
+- The default increment is the **third digit** (`0.1.0 -> 0.1.1`), for
+  ordinary changes. `--minor` bumps the second digit (`0.1.0 -> 0.2.0`) and
+  `--major` (1.0.0) is an explicit decision. `--dry-run` prints the plan;
+  `--no-push` stops after the local commit and tag.
 - **Do not register this package in the General registry**, and do not open a
   registry PR, for the foreseeable future. Installation stays
   `Pkg.add(url = "https://github.com/sarielhp/BasicPlanarGraphs.jl")`.

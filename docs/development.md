@@ -122,13 +122,14 @@ matching `CHANGELOG.md` section. Cut it with `tools/bump` (Ruby):
 
 ```bash
 tools/bump --dry-run     # print the plan, change nothing
-tools/bump               # minor bump (default), gate, commit, tag, push, Release
-tools/bump --patch       # fixes only
+tools/bump               # third-digit bump (default), gate, commit, tag, push, Release
+tools/bump --minor       # second digit, 0.1.0 -> 0.2.0
 tools/bump --major       # 1.0.0, an explicit decision
 ```
 
-The default is **minor** while the package is pre-1.0 (`0.1.0 -> 0.2.0`). The
-script refuses a dirty tree, a branch other than `main`, an existing tag, and an
+The default increments the third digit (`0.1.0 -> 0.1.1`). `--minor` increments
+the second digit (`0.1.0 -> 0.2.0`); `--major` (1.0.0) is an explicit decision.
+The script refuses a dirty tree, a branch other than `main`, an existing tag, and an
 empty `[Unreleased]` section; a failed gate rolls the edits back. It moves the
 `[Unreleased]` entries under `## [X.Y.Z] - YYYY-MM-DD`, updates the comparison
 links, runs `tools/gate`, commits `release: vX.Y.Z`, creates the annotated tag,

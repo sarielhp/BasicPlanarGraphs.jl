@@ -3,12 +3,13 @@
 
 # tools/bump — cut a release: version, changelog, gate, tag, push, GitHub Release.
 #
-# The package is pre-1.0, so the default increment is MINOR (0.1.0 -> 0.2.0);
-# patch releases are for fixes only and a major bump (1.0.0) is an explicit
-# decision. The script never registers the package anywhere.
+# The package is pre-1.0. An ordinary change bumps the third digit (0.1.0 ->
+# 0.1.1); a feature release is an explicit MINOR bump (0.1.0 -> 0.2.0), and a
+# major bump (1.0.0) is an explicit decision. The script never registers the
+# package anywhere.
 #
-#   tools/bump                  # minor: version, changelog, gate, commit, tag, push, Release
-#   tools/bump --patch          # fixes only
+#   tools/bump                  # third digit: version, changelog, gate, commit, tag, push, Release
+#   tools/bump --minor          # 0.1.0 -> 0.2.0
 #   tools/bump --major          # 1.0.0, an explicit decision
 #   tools/bump --dry-run        # print the plan and change nothing
 #   tools/bump --no-push        # stop after the local commit and tag
@@ -53,10 +54,10 @@ requested = []
 parser = OptionParser.new do |o|
   o.banner = 'usage: tools/bump [--major|--minor|--patch] [options]'
   o.separator ''
-  o.separator 'Increment (default: minor, 0.1.0 -> 0.2.0):'
+  o.separator 'Increment (default: third digit, 0.1.0 -> 0.1.1):'
   o.on('--major', 'increment the major version (1.0.0)') { requested << :major }
-  o.on('--minor', 'increment the minor version (default)') { requested << :minor }
-  o.on('--patch', 'increment the patch version, for fixes only') { requested << :patch }
+  o.on('--minor', 'increment the second digit (0.1.0 -> 0.2.0)') { requested << :minor }
+  o.on('--patch', 'increment the third digit (default)') { requested << :patch }
   o.separator ''
   o.separator 'Options:'
   o.on('--dry-run', 'print the plan, change nothing') { options[:dry_run] = true }
@@ -85,7 +86,7 @@ if requested.size > 1
   warn 'bump: choose at most one of --major, --minor, --patch'
   exit 3
 end
-increment = requested.first || :minor
+increment = requested.first || :patch
 
 dirty = capture('git', 'status', '--porcelain')
 abort 'bump: git is not available' if dirty.nil?
