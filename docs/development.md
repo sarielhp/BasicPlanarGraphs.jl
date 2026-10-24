@@ -118,21 +118,28 @@ julia --project=. benchmark/run.jl --suite=phases   # internals of separator
 ## Releases
 
 A release is a Git tag plus a GitHub Release object whose notes are the
-matching `CHANGELOG.md` section. The package is not registered in the General
-registry and there is no plan to register it for the foreseeable future;
-installation stays `Pkg.add(url = "https://github.com/sarielhp/BasicPlanarGraphs.jl")`.
+matching `CHANGELOG.md` section. Cut it with `tools/bump` (Ruby):
 
-1. Set `version` in `Project.toml` and add the matching
-   `## [X.Y.Z] - YYYY-MM-DD` section to `CHANGELOG.md`.
-2. Run `tools/gate`.
-3. Commit, then create an annotated tag: `git tag -a vX.Y.Z -m "vX.Y.Z"`.
-4. `tools/push` pushes the branch; push the tag explicitly with
-   `git push origin vX.Y.Z`.
-5. Create the GitHub Release from the changelog section, for example
-   `gh release create vX.Y.Z --verify-tag --title "vX.Y.Z" --notes-file NOTES.md`
-   with `NOTES.md` holding that section's text.
+```bash
+tools/bump --dry-run     # print the plan, change nothing
+tools/bump               # minor bump (default), gate, commit, tag, push, Release
+tools/bump --patch       # fixes only
+tools/bump --major       # 1.0.0, an explicit decision
+```
 
-CI never creates a tag, a GitHub release, or a registry entry.
+The default is **minor** while the package is pre-1.0 (`0.1.0 -> 0.2.0`). The
+script refuses a dirty tree, a branch other than `main`, an existing tag, and an
+empty `[Unreleased]` section; a failed gate rolls the edits back. It moves the
+`[Unreleased]` entries under `## [X.Y.Z] - YYYY-MM-DD`, updates the comparison
+links, runs `tools/gate`, commits `release: vX.Y.Z`, creates the annotated tag,
+pushes both, and creates the GitHub Release with the same notes. `--no-push`
+stops after the local commit and tag; `--no-github-release` leaves the Release
+for later.
+
+The package is not registered in the General registry and there is no plan to
+register it for the foreseeable future; installation stays
+`Pkg.add(url = "https://github.com/sarielhp/BasicPlanarGraphs.jl")`. CI never
+creates a tag, a GitHub release, or a registry entry.
 
 ## CI
 

@@ -1,0 +1,216 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# tools/bump — cut a release: version, changelog, gate, tag, push, GitHub Release.
+#
+# The package is pre-1.0, so the default increment is MINOR (0.1.0 -> 0.2.0);
+# patch releases are for fixes only and a major bump (1.0.0) is an explicit
+# decision. The script never registers the package anywhere.
+#
+#   tools/bump                  # minor: version, changelog, gate, commit, tag, push, Release
+#   tools/bump --patch          # fixes only
+#   tools/bump --major          # 1.0.0, an explicit decision
+#   tools/bump --dry-run        # print the plan and change nothing
+#   tools/bump --no-push        # stop after the local commit and tag
+#   tools/bump --no-github-release
+#   tools/bump --no-gate        # rehearsal only; warns on stderr
+#
+# The new version comes from `Project.toml`; the notes are the `[Unreleased]`
+# section of `CHANGELOG.md`, moved under `## [X.Y.Z] - YYYY-MM-DD`. The script
+# refuses a dirty tree, a branch other than `main`, an existing tag, and an
+# empty `[Unreleased]` section. A failed gate rolls the edits back.
+#
+# Exit status: 0 success; 1 a step failed; 3 usage error.
+
+require 'fileutils'
+require 'open3'
+require 'optparse'
+require 'time'
+require 'tmpdir'
+
+ROOT = File.expand_path('..', __dir__)
+PROJECT = File.join(ROOT, 'Project.toml')
+CHANGELOG = File.join(ROOT, 'CHANGELOG.md')
+FALLBACK_REPO = 'https://github.com/sarielhp/BasicPlanarGraphs.jl'
+
+def capture(*cmd)
+  out, _err, status = Open3.capture3(*cmd, chdir: ROOT)
+  status.success? ? out.strip : nil
+end
+
+def run(*cmd)
+  puts "bump: #{cmd.join(' ')}"
+  system(*cmd, chdir: ROOT)
+end
+
+def gh_available?
+  system('gh', '--version', out: File::NULL, err: File::NULL)
+end
+
+options = { push: true, github_release: true, gate: true, dry_run: false }
+requested = []
+
+parser = OptionParser.new do |o|
+  o.banner = 'usage: tools/bump [--major|--minor|--patch] [options]'
+  o.separator ''
+  o.separator 'Increment (default: minor, 0.1.0 -> 0.2.0):'
+  o.on('--major', 'increment the major version (1.0.0)') { requested << :major }
+  o.on('--minor', 'increment the minor version (default)') { requested << :minor }
+  o.on('--patch', 'increment the patch version, for fixes only') { requested << :patch }
+  o.separator ''
+  o.separator 'Options:'
+  o.on('--dry-run', 'print the plan, change nothing') { options[:dry_run] = true }
+  o.on('--no-gate', 'skip tools/gate (rehearsal only)') { options[:gate] = false }
+  o.on('--no-push', 'commit and tag locally, do not push') { options[:push] = false }
+  o.on('--no-github-release', 'do not create the GitHub Release') do
+    options[:github_release] = false
+  end
+  o.on('-h', '--help', 'show this help') do
+    puts o
+    exit 0
+  end
+end
+
+begin
+  parser.parse!
+rescue OptionParser::ParseError => e
+  warn "bump: #{e.message}\n#{parser}"
+  exit 3
+end
+unless ARGV.empty?
+  warn "bump: unexpected argument: #{ARGV.first}\n#{parser}"
+  exit 3
+end
+if requested.size > 1
+  warn 'bump: choose at most one of --major, --minor, --patch'
+  exit 3
+end
+increment = requested.first || :minor
+
+dirty = capture('git', 'status', '--porcelain')
+abort 'bump: git is not available' if dirty.nil?
+abort 'bump: working tree is dirty; commit or stash the changes first' unless dirty.empty?
+
+branch = capture('git', 'rev-parse', '--abbrev-ref', 'HEAD')
+abort 'bump: cannot determine the current branch' if branch.nil?
+abort "bump: releases are cut from main, not #{branch}" unless branch == 'main'
+
+project = File.read(PROJECT)
+match = project.match(/^version\s*=\s*"(\d+)\.(\d+)\.(\d+)"/)
+abort 'bump: no x.y.z version in Project.toml' if match.nil?
+
+major, minor, patch = match[1].to_i, match[2].to_i, match[3].to_i
+parts =
+  case increment
+  when :major then [major + 1, 0, 0]
+  when :minor then [major, minor + 1, 0]
+  else [major, minor, patch + 1]
+  end
+new_version = parts.join('.')
+abort "bump: tag v#{new_version} already exists" if capture(
+  'git', 'rev-parse', '-q', '--verify', "refs/tags/v#{new_version}"
+)
+
+repo = capture('git', 'remote', 'get-url', 'origin') || FALLBACK_REPO
+repo = repo.sub(/\.git\z/, '').sub(%r{\Agit@github\.com:}, 'https://github.com/')
+
+changelog = File.read(CHANGELOG)
+date = Time.now.strftime('%Y-%m-%d')
+escaped = Regexp.escape(new_version)
+section = /^## \[#{escaped}\][^\n]*\n(.*?)(?=^## \[|^\[[^\]]+\]:|\z)/m
+unreleased = /^## \[Unreleased\][^\n]*\n(.*?)(?=^## \[|^\[[^\]]+\]:|\z)/m
+
+abort "bump: CHANGELOG.md already has a [## {new_version}] section" if changelog.match?(
+  /^## \[#{escaped}\]/
+)
+
+entry = changelog.match(unreleased)
+if entry && !entry[1].strip.empty?
+  changelog = changelog.sub(
+    /^## \[Unreleased\][^\n]*\n/,
+    "## [Unreleased]\n\n## [#{new_version}] - #{date}\n",
+  )
+else
+  abort "bump: nothing to release; add entries under '## [Unreleased]' in CHANGELOG.md"
+end
+
+changelog = changelog.gsub(/^\[Unreleased\]: .*\n/, '')
+links = "[Unreleased]: #{repo}/compare/v#{new_version}...HEAD\n"
+links += "[#{new_version}]: #{repo}/releases/tag/v#{new_version}\n"
+if (index = changelog.index(/^\[[^\]]+\]: /))
+  changelog = changelog[0...index] + links + changelog[index..]
+else
+  changelog = changelog.rstrip + "\n\n" + links
+end
+
+notes = changelog[section, 1].to_s.strip
+abort 'bump: the new changelog section is empty' if notes.empty?
+
+new_project = project.sub(/^version\s*=\s*"\d+\.\d+\.\d+"/) do
+  "version = \"#{new_version}\""
+end
+
+if options[:dry_run]
+  puts "bump: #{parts.join('.')} (#{increment})"
+  puts "bump: CHANGELOG [Unreleased] -> [#{new_version}] - #{date} (#{notes.lines.size} lines)"
+  puts "bump: would run tools/gate" if options[:gate]
+  puts "bump: would commit 'release: v#{new_version}', tag v#{new_version}"
+  puts "bump: would push the branch and tag" if options[:push]
+  puts "bump: would create the GitHub Release" if options[:push] && options[:github_release]
+  exit 0
+end
+
+user = ENV.fetch('USER', 'user')
+tmpdir = File.join(Dir.tmpdir, user, 'BasicPlanarGraphs')
+FileUtils.mkdir_p(tmpdir)
+notes_path = File.join(tmpdir, "release-notes-#{new_version}.md")
+File.write(notes_path, notes + "\n")
+
+project_original = File.read(PROJECT)
+changelog_original = File.read(CHANGELOG)
+File.write(PROJECT, new_project)
+File.write(CHANGELOG, changelog)
+
+if options[:gate]
+  unless run(File.join(ROOT, 'tools', 'gate'))
+    File.write(PROJECT, project_original)
+    File.write(CHANGELOG, changelog_original)
+    abort 'bump: gate failed; the version and changelog edits were rolled back'
+  end
+else
+  warn 'bump: skipping tools/gate (--no-gate)'
+end
+
+run('git', 'add', 'Project.toml', 'CHANGELOG.md') or abort 'bump: git add failed'
+run('git', 'commit', '-m', "release: v#{new_version}") or abort 'bump: git commit failed'
+run('git', 'tag', '-a', "v#{new_version}", '-m', "Release v#{new_version}") or
+  abort 'bump: git tag failed'
+
+if options[:push]
+  push = File.join(ROOT, 'tools', 'push')
+  pushed = File.executable?(push) ? run(push) : run('git', 'push', 'origin', 'HEAD')
+  abort 'bump: pushing the branch failed; the commit and tag are local' unless pushed
+  abort 'bump: pushing the tag failed; the tag is local' unless run(
+    'git', 'push', 'origin', "v#{new_version}"
+  )
+else
+  puts 'bump: --no-push; the commit and tag are local'
+end
+
+if options[:push] && options[:github_release]
+  if gh_available?
+    created = run(
+      'gh', 'release', 'create', "v#{new_version}", '--verify-tag',
+      '--title', "v#{new_version}", '--notes-file', notes_path, '--latest'
+    )
+    unless created
+      warn "bump: the GitHub Release failed; create it with:\n" \
+           "  gh release create v#{new_version} --verify-tag --notes-file #{notes_path}"
+    end
+  else
+    warn "bump: gh is not available; create the GitHub Release with:\n" \
+         "  gh release create v#{new_version} --verify-tag --notes-file #{notes_path}"
+  end
+end
+
+puts "bump: released v#{new_version} (not registered in the General registry)"
