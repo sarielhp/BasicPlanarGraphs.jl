@@ -93,6 +93,48 @@ end
         @test planar_embedding(dense) === nothing
     end
 
+    @testset "the linear decision procedure" begin
+        # Same verdict as Graphs' implementation wherever that one survives.
+        agree = [
+            SimpleGraph(0),
+            SimpleGraph(1),
+            path_graph(6),
+            cycle_graph(7),
+            complete_graph(4),
+            complete_graph(5),
+            complete_bipartite_graph(3, 3),
+            smallgraph(:dodecahedral),
+            smallgraph(:petersen),
+            planar_grid(3, 3),
+            planar_wheel(7),
+            random_triangulation(30; rng = MersenneTwister(2)).graph,
+        ]
+        for n in (6, 8, 10), p in (0.2, 0.5, 0.8)
+            push!(agree, random_graph(n, p, MersenneTwister(n)))
+        end
+        for g in agree
+            @test is_planar_linear(g) == is_planar(g)
+        end
+
+        # A PlanarGraph with a valid rotation is planar without re-running the
+        # test; a broken rotation is not evidence of anything, so it is recomputed.
+        embedded = planar_wheel(9)
+        @test is_planar_linear(embedded)
+        broken = PlanarGraph([[2, 3, 4], [1, 3, 4], [1, 2, 4], [1, 2, 3]])
+        @test !is_planar_embedding(broken)
+        @test is_planar_linear(broken)
+
+        # The regression that matters: Graphs' recursive test overflows its stack
+        # on a path of this size, because the DFS depth is the path length.
+        long_path = path_graph(100_000)
+        @test is_planar_linear(long_path)
+
+        # ... and the depth grows with n, so the running time must not.
+        short = @elapsed is_planar_linear(path_graph(25_000))
+        long = @elapsed is_planar_linear(path_graph(100_000))
+        @test long <= 12 * short + 0.5
+    end
+
     @testset "the embedding is a rotation system" begin
         g = smallgraph(:dodecahedral)
         embedded = planar_embedding(g)

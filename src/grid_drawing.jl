@@ -1,7 +1,8 @@
 # Straight-line drawings on an integer grid in O(n) × O(n) area.
 #
 # The placement is the one of de Fraysseix, Pach and Pollack, in the formulation
-# used by OGDF (`src/ogdf/planarlayout/FPPLayout.cpp`): the graph is augmented
+# used by OGDF (`src/ogdf/planarlayout/FPPLayout.cpp`, GPL-2.0 or GPL-3.0): the
+# graph is augmented
 # to a maximal planar graph by inserting chords into the faces of its embedding,
 # a shelling order of that triangulation is computed by peeling vertices off the
 # outer face, and the vertices are then placed level by level, each new vertex

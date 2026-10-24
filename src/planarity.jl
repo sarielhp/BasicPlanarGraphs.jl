@@ -8,8 +8,8 @@
 # running time is O(n + m).
 #
 # The translation follows the reference implementation in NetworkX
-# (`networkx/algorithms/planarity.py`), which is the published algorithm with
-# the iterative formulations that avoid deep recursion.
+# (`networkx/algorithms/planarity.py`, BSD-3-Clause), which is the published
+# algorithm with the iterative formulations that avoid deep recursion.
 #
 # Edges are keyed by oriented pairs `(tail, head)` in `Dict`s; the graph has at
 # most `3n - 6` edges when it is planar, so the dictionaries stay linear.
@@ -547,13 +547,47 @@ _adjacency(graph::SimpleGraph) = [Int.(collect(neighbors(graph, v))) for v = 1:n
     is_planar(g::PlanarGraph) -> Bool
 
 Whether the underlying graph of `g` is planar. This is `Graphs.is_planar`, the
-Left-Right planarity test, which runs in `O(nv(g) + ne(g))` time; the stored
-rotation system plays no part,
-so a `PlanarGraph` with a broken embedding still reports whether its graph is
-planar. Use [`is_planar_embedding`](@ref) for the embedding question, and
+Left-Right planarity test; the stored rotation system plays no part, so a
+`PlanarGraph` with a broken embedding still reports whether its graph is planar.
+Use [`is_planar_embedding`](@ref) for the embedding question, and
 [`planar_embedding`](@ref) to compute one.
+
+!!! warning
+    `Graphs.is_planar` recurses once per DFS edge and sorts the nesting depths
+    by scanning them once per vertex, so its stack depth is the depth of the DFS
+    forest and its running time is quadratic. It overflows the Julia stack on
+    graphs with long paths — a `path_graph(100_000)`, or a road network — and
+    the session is no longer trustworthy after that. Use
+    [`is_planar_linear`](@ref) for anything larger than a few thousand vertices.
 """
 is_planar(g::PlanarGraph) = is_planar(g.graph)
+
+"""
+    is_planar_linear(g) -> Bool
+
+Whether `g` is planar, decided in `O(nv(g) + ne(g))` time by this package's own
+iterative Left-Right test; the same criterion as `Graphs.is_planar`, without its
+two scalability limits.
+
+The two DFS passes run on an explicit stack, so the depth of the DFS forest does
+not become the depth of the Julia call stack, and the graph is scanned a constant
+number of times, so the running time is linear. Both matter in practice:
+`is_planar` (which is `Graphs.is_planar`) throws a `StackOverflowError` from
+about 10^5 vertices on a path, and is quadratic well before that, whereas this
+function handles a road network with a million intersections.
+
+Accepts a `SimpleGraph` and a `PlanarGraph`; for the latter a valid stored
+rotation already proves planarity, so the answer is `true` without running the
+test, and an invalid one is recomputed from the underlying graph.
+
+```julia
+julia> is_planar_linear(path_graph(100_000))
+true
+```
+
+Use [`planar_embedding`](@ref) when the rotation system is wanted as well.
+"""
+is_planar_linear(g::Union{PlanarGraph,SimpleGraph}) = planar_embedding(g) !== nothing
 
 """
     planar_embedding(g::SimpleGraph) -> Union{PlanarGraph, Nothing}

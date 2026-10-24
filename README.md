@@ -14,7 +14,7 @@ Full documentation lives in [`docs/`](docs/README.md):
 | Page | Contents |
 |---|---|
 | [Embedding](docs/embedding.md) | the `PlanarGraph` type, rotation systems, faces, duality, Euler's formula, the dart core |
-| [Planarity and embedding](docs/planarity.md) | `is_planar`, `planar_embedding`, the Left-Right test, what an embedding guarantees |
+| [Planarity and embedding](docs/planarity.md) | `is_planar_linear`, `planar_embedding`, the Left-Right test, what an embedding guarantees |
 | [Grid drawing](docs/drawing.md) | `grid_drawing`, `GridDrawing`, grid-size bounds, the Fraysseix–Pach–Pollack placement |
 | [Separator](docs/separator.md) | guarantees, the Lipton–Tarjan stages, refinement, disconnected inputs, complexity |
 | [Generators and triangulation](docs/generators.md) | `planar_path`, `planar_cycle`, `planar_grid`, `planar_wheel`, `random_triangulation`, `triangulate` |
@@ -71,12 +71,13 @@ of the vertices, no edge between `A` and `B`, `|A|, |B| <= balance * n`, and
 linear in `n + m`, with a small constant. The stages, the guarantees and the
 caveats: [Separator](docs/separator.md).
 
-Planarity is decided by the Left-Right test, `is_planar`, in linear time, and
+Planarity is decided by the Left-Right test, `is_planar_linear`, in linear time
+on an explicit stack (a road network with a million intersections is fine), and
 `planar_embedding` turns the partition of the return edges into a rotation
 system — or recomputes one for a stored rotation that is not an embedding:
 
 ```julia
-is_planar(complete_graph(5))                       # false
+is_planar_linear(complete_graph(5))                # false
 e = planar_embedding(smallgraph(:dodecahedral))    # 20 vertices, 12 faces
 ```
 
@@ -90,11 +91,44 @@ bare `SimpleGraph`) store it as text. Details:
 Generators, triangulation, and the full export list:
 [Generators](docs/generators.md) and [API reference](docs/api.md).
 
+[`examples/test_planarity.jl`](examples/test_planarity.jl) puts the pipeline
+together on a real road network: it downloads the TIGER/Line road graph of
+Pennsylvania, cleans it into a pure graph, and for 1000, 10,000, 100,000 induced
+vertices and for all 1,088,092 of them reports the planarity verdict, the
+computed embedding, and the separator with its verification, timing every stage.
+On the whole graph that is 8.4 s for the planarity test, 8.5 s for the embedding
+(454,218 faces), and 20.2 s for the separator, which returns `|C| = 2292` at a
+balance of 49.9 %, with a peak of 4.0 GiB resident. It is described in
+[Development](docs/development.md).
+
+## Credits and sources
+
+The algorithms are from the literature, and each Julia implementation was
+written against a published reference implementation. Where a reference's
+structure is mirrored — the iterative DFS stacks of the Left-Right test, the
+shelling-order bookkeeping of the grid placement — the header of the
+corresponding `src/` file names it.
+
+| Algorithm | Source paper | Reference implementation consulted | Its license |
+|---|---|---|---|
+| Planarity testing and embedding (`src/planarity.jl`) | U. Brandes, *The Left-Right Planarity Test* (2009) | [NetworkX](https://networkx.org) `algorithms/planarity.py`: the iterative formulation of the two DFS passes, the nesting-depth rules and the conflict-stack operations | BSD-3-Clause |
+| Straight-line grid drawing (`src/grid_drawing.jl`) | H. de Fraysseix, J. Pach, R. Pollack, *How to draw a planar graph on a grid* (Combinatorica 10, 1990) | [OGDF](https://ogdf.github.io) `src/ogdf/planarlayout/FPPLayout.cpp`: the shelling order over a candidate list, the level-by-level placement and the x-offset pass | GPL-2.0 or GPL-3.0 |
+| Planar separator (`src/separator.jl`) | R. J. Lipton, R. E. Tarjan, *A Separator Theorem for Planar Graphs* (SIAM J. Appl. Math. 36(2), 1979) | — | — |
+| `is_planar` (re-exported) | same criterion as above | [Graphs.jl](https://github.com/JuliaGraphs/Graphs.jl) `src/planarity.jl` | BSD-2-Clause |
+
+No source file was copied: the Julia code is an independent implementation, and
+the licenses above describe the projects consulted, not the terms under which
+this package is distributed (it is MIT, see [LICENSE](LICENSE)).
+
+The example in [`examples/test_planarity.jl`](examples/test_planarity.jl) runs
+on the SNAP road networks (J. Leskovec and A. Krevl, *SNAP Datasets*, Stanford
+University), which are derived from the US Census Bureau's TIGER/Line files.
+
 ## Development
 
 ```bash
 tools/build   # instantiate the environment and load the package
-tools/gate    # audit, static analysis, tests (with Aqua), build (~35 s)
+tools/gate    # audit, static analysis, examples, tests (with Aqua), build (~35 s)
 ```
 
 Pushing does not block on CI: `tools/push` pushes and prints the run URL, and

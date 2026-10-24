@@ -2,15 +2,15 @@
 
 Two questions, one algorithm. *Is this graph planar?* and *what is a rotation
 system for it?* are both answered in linear time by the Left-Right planarity
-test, which is what [`is_planar`](api.md) (from `Graphs.jl`) and
-[`planar_embedding`](api.md) use.
+test: [`is_planar_linear`](api.md) for the decision, [`planar_embedding`](api.md)
+for the rotation system.
 
 ```julia
 using Graphs, BasicPlanarGraphs
 
-is_planar(complete_graph(4))        # true
-is_planar(complete_graph(5))        # false
-is_planar(smallgraph(:petersen))    # false
+is_planar_linear(complete_graph(4))        # true
+is_planar_linear(complete_graph(5))        # false
+is_planar_linear(smallgraph(:petersen))    # false
 
 g = planar_embedding(smallgraph(:dodecahedral))
 nfaces(g)                           # 12
@@ -19,38 +19,60 @@ is_planar_embedding(g)              # true
 
 | Call | Returns | Time |
 |---|---|---|
-| `is_planar(g)` | `Bool` | `O(nv + ne)` |
-| `is_planar(g::PlanarGraph)` | `Bool` for the underlying graph | `O(nv + ne)` |
-| `planar_embedding(g::SimpleGraph)` | `PlanarGraph` or `nothing` | `O(nv + ne)` |
+| `is_planar_linear(g)` | `Bool` | `O(nv + ne)`, iterative |
+| `is_planar(g)` | `Bool` (`Graphs.is_planar`) | quadratic, recursive |
+| `planar_embedding(g::SimpleGraph)` | `PlanarGraph` or `nothing` | `O(nv + ne)`, iterative |
 | `planar_embedding(g::PlanarGraph)` | `g` or a fresh `PlanarGraph`, or `nothing` | `O(nv + ne)` |
 
-## Testing planarity
+## The criterion
 
-`is_planar` is `Graphs.is_planar`, imported and re-exported under the same name,
-so a program that loads both packages sees a single function. It is the
+Both functions implement the
 [Left-Right planarity criterion](https://en.wikipedia.org/wiki/Left-right_planarity_test)
-of Brandes (2009): an iterative DFS orients the edges, the lowpoints of the
-oriented edges give a nesting depth, and a second DFS maintains a stack of
-conflict intervals that decides, for every return edge, whether it can be routed
-on the left or on the right of the DFS tree. The graph is planar exactly when
-that partition can always be built.
+of Brandes (2009). A DFS orients the edges; the lowpoints of the oriented edges
+give each edge a nesting depth; a second DFS maintains a stack of conflict
+intervals and decides, for every return edge, whether it is routed on the left or
+on the right of the DFS tree. The graph is planar exactly when that partition can
+always be built — and that same partition, read around every vertex, is a
+rotation system, which is why the embedding costs no more than the decision.
 
-The test reads adjacency only. For a `PlanarGraph` it answers about the graph
-and ignores the stored rotation, so a broken embedding still yields the correct
+## Two entry points, and why
+
+`is_planar_linear` is this package's own implementation. Both DFS passes run on
+an explicit stack, so a long path does not become a long Julia call stack, and
+the graph is scanned a constant number of times, so `O(n + m)` is a real bound on
+real instances.
+
+`is_planar` is `Graphs.is_planar`, imported and re-exported so that a program
+loading both packages sees a single function and code written against `Graphs.jl`
+keeps working. It decides the same criterion, but its two DFS passes are
+recursive and its nesting-depth sort rescans a dictionary once per vertex, which
+makes it quadratic and — from roughly 10^5 vertices on a path — fatal:
+
+```julia
+is_planar_linear(path_graph(100_000))   # true, 0.3 s
+is_planar(path_graph(100_000))          # StackOverflowError
+```
+
+The overflow is not a catchable error: Julia warns that the program state may be
+corrupted, and it is. Use `is_planar_linear` at that size; keep `is_planar` for
+interchange. The two agree on every graph small enough for both (the tests check
+random graphs, the generators, and the classical obstructions).
+
+Both read adjacency only. For a `PlanarGraph` they answer about the graph and
+ignore the stored rotation, so a broken embedding still yields the correct
 verdict:
 
 ```julia
 k4 = PlanarGraph([[2, 3, 4], [1, 3, 4], [1, 2, 4], [1, 2, 3]])
-is_planar(k4)            # true: the graph is K4
+is_planar_linear(k4)     # true: the graph is K4
 is_planar_embedding(k4)  # false: that rotation gives only two faces
 ```
 
 ## Computing an embedding
 
-`planar_embedding` runs the same Left-Right test — its output *is* the partition
-of the return edges into left and right — and turns the result into the rotation
-system stored by a [`PlanarGraph`](embedding.md). The left and right sides of
-each return edge, read in DFS order around every vertex, give the
+`planar_embedding` runs the same test and turns the left/right partition into the
+rotation system stored by a [`PlanarGraph`](embedding.md). The left and right
+sides of each return edge, read in DFS order around every vertex, give the
 counter-clockwise order of the neighbours.
 
 - The result is a `PlanarGraph` whose rotation system satisfies Euler's formula
@@ -79,19 +101,19 @@ h === k4                         # false: the rotation was rebuilt
 is_planar_embedding(h)           # true
 ```
 
-## Why the same algorithm twice
+## Cost
 
-`is_planar` answers the decision problem and stops as soon as the conflict stack
-reports a contradiction; `planar_embedding` needs the partition that the test
-builds on the way. Both are one pass over the vertices and one over the edges
-per DFS, with dictionaries keyed by oriented edges, so both are `O(nv + ne)` in
-time and space on planar input. Neither recurses: each DFS keeps an explicit
-stack, so a graph with a long path does not exhaust the Julia stack.
+`is_planar_linear` stops as soon as the conflict stack reports a contradiction.
+`planar_embedding` needs the partition the test builds on the way, and then
+materialises the rotations. Both are `O(nv + ne)` time and space: the state is a
+handful of dictionaries keyed by oriented edges, at most `2·ne` entries each, and
+every stage is one pass over vertices and darts. On a million-vertex road network
+the embedding takes a few seconds and a few GiB, which is why the example program
+in `examples/test_planarity.jl` prints timings and allocation for each size it
+runs.
 
 The construction follows the reference implementation in
-[NetworkX](https://networkx.org/documentation/stable/reference/algorithms/planarity.html);
-the tests compare our verdict with `Graphs.is_planar` on random graphs, all small
-graphs, and the classical obstructions.
+[NetworkX](https://networkx.org/documentation/stable/reference/algorithms/planarity.html).
 
 ## What is not checked
 

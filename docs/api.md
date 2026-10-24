@@ -70,13 +70,28 @@ dual edge would be a self-loop.
 
 ## Planarity and embedding
 
+### `is_planar_linear(g) -> Bool`
+
+Whether `g` is planar, decided in `O(nv + ne)` time by this package's own
+iterative Left-Right test. The two DFS passes use an explicit stack, so the depth
+of the DFS forest does not become the depth of the Julia call stack, and the
+graph is scanned a constant number of times. This is the function to use on
+large graphs — road networks, meshes, anything with long paths.
+
+Accepts a `SimpleGraph` and a `PlanarGraph`; for a `PlanarGraph` a valid stored
+rotation already proves planarity, and an invalid one is recomputed from the
+graph. See [Planarity and embedding](planarity.md).
+
 ### `is_planar(g) -> Bool`
 
-Whether `g` is planar. This is `Graphs.is_planar`, imported and re-exported under
-the same name (a program that loads both packages sees one function), so it
-accepts any graph `Graphs.jl` understands. It is the Left-Right test of Brandes
-and runs in `O(nv + ne)` time. For a `PlanarGraph` it asks about the graph and
-ignores the stored rotation. See [Planarity and embedding](planarity.md).
+`Graphs.is_planar`, imported and re-exported under the same name, so a program
+that loads both packages sees one function. It decides the same criterion, but it
+recurses once per DFS edge and sorts nesting depths in `O(nv · ne)`, so it
+overflows the Julia stack from about 10^5 vertices on a path and is quadratic
+well before that; the resulting `StackOverflowError` leaves the session
+untrustworthy. For a `PlanarGraph` it asks about the graph and ignores the
+stored rotation. Prefer `is_planar_linear` unless interchange with `Graphs.jl`
+is the point.
 
 ### `planar_embedding(g) -> Union{PlanarGraph, Nothing}`
 
@@ -217,7 +232,8 @@ messages (default `<io>`); errors are `ArgumentError` with the form
 | `faces` | query | `Vector{Vector{T}}` |
 | `nfaces` | query | `Int` |
 | `is_planar_embedding` | query | `Bool` |
-| `is_planar` | decision | `Bool` |
+| `is_planar_linear` | decision | `Bool` |
+| `is_planar` | decision (`Graphs.jl`) | `Bool` |
 | `planar_embedding` | algorithm | `PlanarGraph` or `nothing` |
 | `grid_drawing`, `GridDrawing` | drawing | `GridDrawing` |
 | `coordinates`, `width`, `height` | drawing query | positions and bounding box |
