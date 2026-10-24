@@ -1,0 +1,106 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# push — push the current branch and return immediately.
+#
+# Fire-and-forget by design (see AGENTS.md): this script never waits for the
+# GitHub Actions run that the push triggers. It reports the run URL, if GitHub has
+# registered one yet, and leaves the verdict to tools/check_ci.
+#
+#   tools/push                     # git push origin HEAD
+#   tools/push -u                  # .. with --set-upstream
+#   tools/push --dry-run           # show what would be pushed
+#   tools/push -- --force-with-lease   # anything after -- goes to git push
+#
+# Exit status: git's own (0 on a successful push), plus 3 if git itself is unusable.
+
+require "json"
+require "open3"
+require "optparse"
+
+def gh(*args)
+  out, _err, status = Open3.capture3("gh", *args)
+  status.success? ? out.strip : nil
+end
+
+def git(*args)
+  out, err, status = Open3.capture3("git", *args)
+  [out.strip, err.strip, status.success?]
+end
+
+remote = "origin"
+branch = nil
+set_upstream = false
+dry_run = false
+passthrough = []
+
+parser = OptionParser.new do |o|
+  o.banner = "usage: tools/push [options] [-- git-push-args...]"
+  o.separator ""
+  o.separator "Push the current branch without waiting for the CI run it triggers."
+  o.separator ""
+  o.on("-r", "--remote NAME", "Remote to push to (default: origin)") { |v| remote = v }
+  o.on("-b", "--branch NAME", "Branch to push (default: the current one)") { |v| branch = v }
+  o.on("-u", "--set-upstream", "Pass --set-upstream to git push") { set_upstream = true }
+  o.on("-n", "--dry-run", "Show what would be pushed, change nothing") { dry_run = true }
+  o.on("-h", "--help", "Show this help") do
+    puts o
+    exit 0
+  end
+end
+
+begin
+  parser.parse!(ARGV)
+rescue OptionParser::ParseError => e
+  warn "push: #{e.message}\n#{parser}"
+  exit 3
+end
+passthrough = ARGV.dup
+
+branch ||= git("rev-parse", "--abbrev-ref", "HEAD").first
+if branch.nil? || branch.empty? || branch == "HEAD"
+  warn "push: detached HEAD; pass --branch"
+  exit 3
+end
+
+args = ["push"]
+args << "--dry-run" if dry_run
+args << "--set-upstream" if set_upstream
+args += [remote, branch]
+args += passthrough
+
+out, err, ok = git(*args)
+out.split("\n").each { |line| puts line unless line.strip.empty? } unless out.empty?
+err.split("\n").each { |line| warn line unless line.strip.empty? } unless err.empty?
+
+unless ok
+  warn "push: git push failed (nothing is waiting on CI, no run was reported)"
+  exit 1
+end
+
+remote_url = git("remote", "get-url", remote).first
+slug = remote_url.to_s[%r{github\.com[:/]+(.+?)(?:\.git)?$}, 1]
+actions = slug ? "https://github.com/#{slug}/actions" : "the repository's Actions page"
+
+if dry_run
+  puts "dry run: nothing pushed, CI not triggered"
+  exit 0
+end
+
+# One non-blocking peek. The run may not be registered yet; that is not an error.
+run = begin
+  raw = gh("run", "list", "--branch", branch, "--limit", "1",
+           "--json", "url,status,conclusion,headSha")
+  raw && JSON.parse(raw).first
+rescue JSON::ParserError
+  nil
+end
+
+head = git("rev-parse", "HEAD").first
+if run && (head.nil? || run["headSha"] == head)
+  puts "CI: #{run["status"]}#{run["conclusion"] ? " (#{run["conclusion"]})" : ""} #{run["url"]}"
+else
+  puts "CI: triggered, run not listed yet #{actions}"
+end
+puts "Verdict later with: tools/check_ci  (0 = green, 1 = failed, 2 = still running, 3 = unknown)"
+exit 0

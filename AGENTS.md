@@ -24,6 +24,23 @@ approval review enabled. Bootstrap the analysis packages separately, when author
 Before any refactor of numerical code, record the outputs on fixed inputs and require
 bit-identical results afterwards; a result change is its own deliberate commit.
 
+## CI is fire-and-forget
+
+Do not block on GitHub Actions. Pushing or dispatching a run means issuing the remote
+command and returning; the verdict is a separate, later question.
+
+- Never `gh run watch`, never poll a run in a loop, and never sleep or wait inside a task
+  for CI to finish. Report that a run was triggered and move on.
+- The one place that inspects results is `tools/check_ci` (Ruby, one shot). Exit status
+  carries the verdict: `0` success, `1` failed/cancelled, `2` still running, `3` no run or
+  unknown. `--jobs` adds a per-job verdict, `--commit REV` pins a commit, `--wait` is an
+  explicit opt-in and is not used in normal flow.
+- `tools/push` pushes the current branch and prints the run URL without waiting.
+- Any other tool in `tools/` that touches CI follows the same rule: trigger remotely,
+  print the URL, leave the verdict to `tools/check_ci`.
+- Surface a CI failure only when the task at hand depends on it, when the user asks for
+  the verdict, or when a run was already known to be red.
+
 ## Package notes
 
 - Public repository: <https://github.com/sarielhp/BasicPlanarGraphs.jl>, MIT licensed,

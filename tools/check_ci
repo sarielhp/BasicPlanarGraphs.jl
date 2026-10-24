@@ -1,0 +1,238 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# check_ci — report whether the most recent GitHub Actions run on a branch passed.
+#
+# One shot by design: this script never blocks waiting for CI unless you ask for it
+# with --wait. Push, then run this later (see AGENTS.md: pushes do not wait on CI).
+#
+#   tools/check_ci                 # latest run on the current branch
+#   tools/check_ci --jobs          # .. plus a per-job verdict
+#   tools/check_ci --commit HEAD   # latest run for the current commit
+#   tools/check_ci --all           # a short table of recent runs
+#   tools/check_ci --wait          # opt-in: poll until the run finishes
+#   tools/check_ci --json | jq .   # machine-readable
+#
+# Exit status (the point of the tool; safe to use in scripts and agents):
+#   0  the run completed and succeeded
+#   1  the run completed and did not succeed (failure, cancelled, timed out, ...)
+#   2  the run has not finished yet (queued / in progress); check again later
+#   3  no matching run, or the check itself could not be performed
+#
+# Requires the GitHub CLI (`gh`), authenticated, and a git checkout with a remote.
+
+require "json"
+require "open3"
+require "optparse"
+require "time"
+
+EXIT_SUCCESS = 0
+EXIT_FAILED  = 1
+EXIT_PENDING = 2
+EXIT_UNKNOWN = 3
+
+# A run "passed" only if it completed with conclusion "success"; every other
+# terminal conclusion is a failure for our purposes.
+def running?(run)  = run["status"] != "completed"
+def succeeded?(run) = run["status"] == "completed" && run["conclusion"] == "success"
+
+def color(text, code) = STDOUT.tty? ? "\e[#{code}m#{text}\e[0m" : text
+def green(text)  = color(text, "32")
+def red(text)    = color(text, "31")
+def yellow(text) = color(text, "33")
+def dim(text)    = color(text, "2")
+
+def verdict(run)
+  return yellow("pending (#{run["status"]})") if running?(run)
+  return green("success") if succeeded?(run)
+
+  red(run["conclusion"] || "unknown")
+end
+
+def gh(*args)
+  out, err, status = Open3.capture3("gh", *args)
+  return [out, nil] if status.success?
+
+  [nil, (err.strip.empty? ? out.strip : err.strip)]
+end
+
+def die(message, code = EXIT_UNKNOWN)
+  warn "check_ci: #{message}"
+  exit code
+end
+
+def git(*args)
+  out, _err, status = Open3.capture3("git", *args)
+  status.success? ? out.strip : nil
+end
+
+def resolve_commit(rev)
+  git("rev-parse", "--verify", "#{rev}^{commit}") or die("cannot resolve revision #{rev.inspect}", EXIT_UNKNOWN)
+end
+
+def fetch_runs(branch:, limit:, workflow:, repo:)
+  args = ["run", "list", "--limit", limit.to_s,
+          "--json", "databaseId,status,conclusion,workflowName,headSha,headBranch,createdAt,url,event,displayTitle"]
+  args += ["--branch", branch] if branch
+  args += ["--repo", repo] if repo
+  args += ["--workflow", workflow] if workflow
+
+  out, err = gh(*args)
+  die("gh run list failed: #{err}", EXIT_UNKNOWN) unless out
+
+  JSON.parse(out)
+rescue JSON::ParserError => e
+  die("cannot parse gh output: #{e.message}", EXIT_UNKNOWN)
+end
+
+def fetch_jobs(run_id, repo:)
+  args = ["run", "view", run_id.to_s, "--json", "jobs"]
+  args += ["--repo", repo] if repo
+  out, err = gh(*args)
+  return [] unless out
+
+  (JSON.parse(out)["jobs"] || [])
+rescue JSON::ParserError
+  []
+end
+
+def short(sha) = sha.to_s[0, 7]
+
+def describe(run, jobs: false, repo: nil)
+  title = run["displayTitle"].to_s.empty? ? "(no title)" : run["displayTitle"]
+  puts "#{verdict(run)}  #{run["workflowName"]} ##{run["databaseId"]}  " \
+       "#{dim("#{run["headBranch"] || "-"}@#{short(run["headSha"])}")}  #{dim(run["createdAt"])}"
+  puts "         #{title}"
+  puts "         #{dim(run["url"])}" if run["url"]
+
+  return unless jobs
+
+  list = fetch_jobs(run["databaseId"], repo: repo)
+  if list.empty?
+    puts dim("         (no job details)")
+    return
+  end
+  list.each do |job|
+    mark = if job["status"] != "completed" then yellow("~")
+           elsif job["conclusion"] == "success" then green("ok")
+           else red("FAIL")
+           end
+    puts "         #{mark}  #{job["name"]}  #{dim(job["conclusion"] || job["status"])}"
+  end
+end
+
+def table(runs, repo: nil)
+  runs.each do |run|
+    puts format("%-34s %-10s %-9s %-22s %s",
+                run["createdAt"], run["status"], run["conclusion"] || "-",
+                "#{run["headBranch"]}@#{short(run["headSha"])}", run["workflowName"])
+  end
+end
+
+def head_sha = git("rev-parse", "HEAD")
+
+def warn_ahead(run)
+  head = head_sha
+  return if head.nil? || run["headSha"] == head
+
+  warn dim("note: this run is for #{short(run["headSha"])}, HEAD is #{short(head)} (no run for HEAD yet?)")
+end
+
+options = {
+  branch: nil,
+  commit: nil,
+  workflow: nil,
+  limit: 20,
+  jobs: false,
+  all: false,
+  wait: false,
+  timeout: 900,
+  interval: 10,
+  quiet: false,
+  json: false,
+  repo: nil,
+}
+
+parser = OptionParser.new do |o|
+  o.banner = "usage: tools/check_ci [options]"
+  o.separator ""
+  o.separator "Report the verdict of the latest GitHub Actions run. Never waits unless --wait."
+  o.separator ""
+  o.separator "Selection:"
+  o.on("-b", "--branch BRANCH", "Branch to inspect (default: current branch)") { |v| options[:branch] = v }
+  o.on("-c", "--commit REV", "Only runs for this commit (default: latest run on the branch)") { |v| options[:commit] = v }
+  o.on("-w", "--workflow NAME", "Only runs of this workflow") { |v| options[:workflow] = v }
+  o.on("-n", "--limit N", Integer, "How many recent runs to scan (default: 20)") { |v| options[:limit] = v }
+  o.on("-R", "--repo OWNER/REPO", "Repository (default: the one gh infers from the checkout)") { |v| options[:repo] = v }
+  o.separator ""
+  o.separator "Output:"
+  o.on("-j", "--jobs", "Show a per-job verdict") { options[:jobs] = true }
+  o.on("-a", "--all", "List the recent runs scanned instead of only the latest") { options[:all] = true }
+  o.on("-q", "--quiet", "One line of output; the exit status carries the verdict") { options[:quiet] = true }
+  o.on("--json", "Print the selected run(s) as JSON") { options[:json] = true }
+  o.separator ""
+  o.separator "Waiting (opt-in; the default is one shot):"
+  o.on("--wait", "Poll until the run finishes") { options[:wait] = true }
+  o.on("--timeout SECONDS", Integer, "Give up waiting after this long (default: 900)") { |v| options[:timeout] = v }
+  o.on("--interval SECONDS", Integer, "Poll interval (default: 10)") { |v| options[:interval] = v }
+  o.separator ""
+  o.on("-h", "--help", "Show this help") do
+    puts o
+    exit EXIT_SUCCESS
+  end
+end
+
+begin
+  parser.parse!(ARGV)
+rescue OptionParser::ParseError => e
+  die("#{e.message}\n#{parser}", EXIT_UNKNOWN)
+end
+die("unexpected arguments: #{ARGV.join(" ")}", EXIT_UNKNOWN) unless ARGV.empty?
+
+options[:branch] ||= git("rev-parse", "--abbrev-ref", "HEAD") unless options[:commit]
+die("not a git repository, or detached HEAD: pass --branch or --commit", EXIT_UNKNOWN) if options[:branch].nil? && options[:commit].nil?
+
+commit = options[:commit] ? resolve_commit(options[:commit]) : nil
+deadline = Time.now + options[:timeout]
+
+loop do
+  runs = fetch_runs(branch: options[:branch], limit: options[:limit],
+                    workflow: options[:workflow], repo: options[:repo])
+  runs = runs.select { |r| r["headSha"] == commit } if commit
+
+  if runs.empty?
+    die("no workflow runs found#{commit ? " for #{short(commit)}" : ""}" \
+        "#{options[:workflow] ? " (workflow #{options[:workflow]})" : ""}", EXIT_UNKNOWN)
+  end
+
+  if options[:all]
+    options[:json] ? puts(JSON.pretty_generate(runs)) : table(runs, repo: options[:repo])
+    latest = runs.first
+  else
+    latest = runs.first
+    if options[:json]
+      payload = options[:jobs] ? latest.merge("jobs" => fetch_jobs(latest["databaseId"], repo: options[:repo])) : latest
+      puts JSON.pretty_generate(payload)
+    elsif options[:quiet]
+      puts "#{latest["conclusion"] || latest["status"]} #{latest["workflowName"]} " \
+           "#{short(latest["headSha"])} #{latest["url"]}"
+    else
+      describe(latest, jobs: options[:jobs], repo: options[:repo])
+      warn_ahead(latest)
+    end
+  end
+
+  if running?(latest) && options[:wait]
+    if Time.now > deadline
+      warn "check_ci: still #{latest["status"]} after #{options[:timeout]}s" unless options[:quiet]
+      exit EXIT_PENDING
+    end
+    sleep options[:interval]
+    next
+  end
+
+  exit EXIT_SUCCESS if succeeded?(latest)
+  exit EXIT_PENDING if running?(latest)
+
+  exit EXIT_FAILED
+end

@@ -105,6 +105,15 @@ These commands and the audit tooling are described in [AGENTS.md](AGENTS.md).
 CI runs `Pkg.test()` on Julia 1.10 and the latest release for Linux (x64),
 macOS (aarch64) and Windows (x64).
 
+Pushing does not block on CI. `tools/push` pushes and prints the run URL;
+`tools/check_ci` reports the verdict later (exit `0` green, `1` failed,
+`2` still running, `3` no run):
+
+```bash
+tools/push            # push, do not wait
+tools/check_ci --jobs # later: what happened, per job
+```
+
 The test suite covers the embedding layer (rotations, faces, dual, Euler),
 triangulation, the generators, and the separator: validity and balance on
 structured, random, sparse, and disconnected graphs, the size bound, a
