@@ -62,6 +62,28 @@ function all_components_fit(g, removed::BitVector, balance)
     return true
 end
 
+# Rotation systems of several graphs side by side, vertex numbers shifted.
+function disjoint_union(parts::PlanarGraph...)
+    rot = Vector{Vector{Int}}()
+    offset = 0
+    for part in parts
+        append!(rot, [Int[w + offset for w in r] for r in rotation(part)])
+        offset += nv(part)
+    end
+    return PlanarGraph(rot)
+end
+
+# Delete each edge with probability `p`, keeping the rotation order.
+function thin_out(g::PlanarGraph, p::Real, rng)
+    gone = Set{Tuple{Int,Int}}()
+    for e in edges(g)
+        rand(rng) < p && push!(gone, (src(e), dst(e)))
+    end
+    kept(v, w) = !((v, w) in gone || (w, v) in gone)
+    rot = rotation(g)
+    return PlanarGraph([Int[w for w in rot[v] if kept(v, w)] for v = 1:nv(g)])
+end
+
 @testset "separator" begin
     @testset "degenerate sizes" begin
         for n = 0:3
@@ -127,27 +149,41 @@ end
         g = PlanarGraph([Int[] for _ = 1:5])
         check_separator(g, separator(g)...)
 
-        left = planar_grid(4, 4)
-        right = planar_wheel(5)
-        graph = SimpleGraph(nv(left) + nv(right))
-        for e in edges(left)
-            Graphs.add_edge!(graph, src(e), dst(e))
-        end
-        for e in edges(right)
-            Graphs.add_edge!(graph, src(e) + nv(left), dst(e) + nv(left))
-        end
-        rot = [collect(neighbors(graph, v)) for v = 1:nv(graph)]
-        joined = PlanarGraph(graph, rot)
+        joined = disjoint_union(planar_grid(4, 4), planar_wheel(5))
         check_separator(joined, separator(joined)...)
 
         # One component dominates, so the separator has to come from inside it.
-        big = planar_grid(12, 12)
-        graph = SimpleGraph(nv(big) + 3)
-        for e in edges(big)
-            Graphs.add_edge!(graph, src(e), dst(e))
+        dominated = disjoint_union(planar_grid(12, 12), PlanarGraph([Int[] for _ = 1:3]))
+        A, B, C = separator(dominated)
+        check_separator(dominated, A, B, C)
+        @test length(C) <= 12
+    end
+
+    @testset "guarantees on every input" begin
+        rng = MersenneTwister(2024)
+        for trial = 1:200
+            n = rand(rng, 3:250)
+            g = random_triangulation(n; rng)
+            g = trial % 3 == 0 ? g : thin_out(g, rand(rng)^0.5, rng)
+            A, B, C = separator(g)
+            check_separator(g, A, B, C)
+            @test length(C) <= 2 * sqrt(2 * nv(g))
         end
-        rot = [collect(neighbors(graph, v)) for v = 1:nv(graph)]
-        check_separator(PlanarGraph(graph, rot), separator(PlanarGraph(graph, rot))...)
+    end
+
+    @testset "minimal separators" begin
+        @test length(separator(planar_path(7))[3]) == 1
+        @test length(separator(planar_cycle(40))[3]) == 2
+        @test length(separator(planar_grid(30, 30))[3]) <= 30
+        @test length(separator(planar_path(2))[3]) == 1
+    end
+
+    @testset "balance and embedding checks" begin
+        @test_throws ArgumentError separator(planar_grid(5, 5); balance = 0.6)
+        # Sorted neighbours are not a planar rotation of a grid.
+        graph = planar_grid(4, 4).graph
+        crossed = PlanarGraph(graph, [collect(neighbors(graph, v)) for v = 1:nv(graph)])
+        @test_throws ArgumentError separator(crossed)
     end
 
     @testset "oracle on small graphs" begin

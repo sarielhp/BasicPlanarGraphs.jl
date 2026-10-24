@@ -225,6 +225,14 @@ function _balanced_dual_dart(
     return best
 end
 
+function _find_root!(dsu::Vector{Int}, x::Int)
+    while dsu[x] != x
+        dsu[x] = dsu[dsu[x]]
+        x = dsu[x]
+    end
+    return x
+end
+
 _not_planar_error() = ArgumentError(
     "cannot compute a cycle separator: the rotation system does not describe " *
     "a planar embedding",

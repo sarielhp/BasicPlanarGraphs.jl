@@ -43,7 +43,8 @@ Full documentation lives in [`docs/`](docs/README.md):
 | [Embedding](docs/embedding.md) | the `PlanarGraph` type, rotation systems, faces, duality, Euler's formula, the dart core |
 | [Planarity and embedding](docs/planarity.md) | `is_planar_linear`, `planar_embedding`, the Left-Right test, what an embedding guarantees |
 | [Grid drawing](docs/drawing.md) | `grid_drawing`, `GridDrawing`, grid-size bounds, the Fraysseix–Pach–Pollack placement |
-| [Separator](docs/separator.md) | guarantees, the Lipton–Tarjan stages, refinement, disconnected inputs, complexity |
+| [Separator](docs/separator.md) | guarantees, the Lipton–Tarjan stages, pruning, disconnected inputs, complexity |
+| [Separator partition](docs/partition.md) | `separator_partition`, the recursive partition into parts of at most `r` vertices, guarantees and cost |
 | [Cycle separator](docs/cycle_separator.md) | guarantees, the left/right convention, the Har-Peled–Nayyeri phases, shortcutting chords |
 | [Generators and triangulation](docs/generators.md) | `planar_path`, `planar_cycle`, `planar_grid`, `planar_wheel`, `random_triangulation`, `triangulate` |
 | [Graph files](docs/io.md) | the sectioned text format, the writers and readers, what is rejected |
@@ -95,9 +96,9 @@ underneath: [Embedding](docs/embedding.md).
 
 `separator(g; balance = 2/3)` returns `(A, B, C)` with `A`, `B`, `C` a partition
 of the vertices, no edge between `A` and `B`, `|A|, |B| <= balance * n`, and
-`|C| = O(sqrt(n))` — at most `2*sqrt(2n) + 1` on the test families. Running time is
-linear in `n + m`, with a small constant. The stages, the guarantees and the
-caveats: [Separator](docs/separator.md).
+`|C| <= 2*sqrt(2n)`. Both bounds hold for every input and the running time is
+`O(n)` in the worst case; `balance` must lie in `[2/3, 1)`. The stages, the
+guarantees and the proof sketch: [Separator](docs/separator.md).
 
 `cycle_separator(g)` returns a balanced separator that is a genuine **simple
 cycle of `g`** rather than a vertex set — consecutive vertices, including the

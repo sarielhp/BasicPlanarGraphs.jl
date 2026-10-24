@@ -9,6 +9,7 @@ using Test
     include("triangulate_test.jl")
     include("generators_test.jl")
     include("separator_test.jl")
+    include("separator_partition_test.jl")
     include("cycle_separator_test.jl")
     include("scaling_test.jl")
     include("graph_io_test.jl")

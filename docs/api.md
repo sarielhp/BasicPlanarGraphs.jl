@@ -122,10 +122,22 @@ Vertex separator `C` with sides `A` and `B`:
 - `A`, `B`, `C` partition `1:nv(g)` and are sorted;
 - no edge joins `A` to `B`;
 - `max(|A|, |B|) <= balance*nv(g)`;
-- `|C| = O(sqrt(nv(g)))`, at most `2*sqrt(2 nv(g)) + 1` on the test families.
+- `|C| <= 2*sqrt(2 nv(g))`.
 
-`balance` must be in `(0, 1)`; otherwise `ArgumentError`. Deterministic for a
-given graph. See [Separator](separator.md).
+Both bounds hold for every input, and the running time is `O(nv(g))` in the worst
+case. `balance` must be in `[2/3, 1)`; otherwise `ArgumentError`, as for a
+rotation system that is not a planar embedding. Deterministic for a given graph.
+See [Separator](separator.md).
+
+## Separator partition
+
+### `separator_partition(g, r; subgraphs = false) -> SeparatorPartition`
+
+Separator `S` and parts of at most `r` vertices with no edge between two parts;
+`|S| <= 16 nv(g)/sqrt(r)`, at most `2 nv(g)/r + 1` parts, `O(n (1 + log(n/r)))`
+time. Fields `separator`, `parts`, `part_of`, and with `subgraphs = true`
+`local_index` and `graphs`. `r < 1` or a non-planar rotation system is an
+`ArgumentError`. See [Separator partition](partition.md).
 
 ## Cycle separator
 

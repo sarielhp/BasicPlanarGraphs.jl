@@ -149,6 +149,26 @@ function darts_of(g::DartGraph, v::Integer)
     return out
 end
 
+# Allocation-free view of the darts leaving a vertex, counter-clockwise.
+struct IncidentDarts
+    g::DartGraph
+    v::Int
+end
+
+incident_darts(g::DartGraph, v::Integer) = IncidentDarts(g, Int(v))
+
+function Base.iterate(r::IncidentDarts)
+    d = r.g.first[r.v]
+    return d == 0 ? nothing : (d, d)
+end
+
+function Base.iterate(r::IncidentDarts, d::Int)
+    nxt = r.g.next_rot[d]
+    return nxt == r.g.first[r.v] ? nothing : (nxt, nxt)
+end
+
+Base.IteratorSize(::Type{IncidentDarts}) = Base.SizeUnknown()
+
 face_successor(g::DartGraph, d::Integer) = g.prev_rot[g.twin[d]]
 
 """
@@ -304,25 +324,50 @@ end
 
 # Pair up darts of `h` that were created without twins. Rotations built by
 # `DartGraph`, `restrict` and `induced` come from simple graphs, so each
-# ordered pair of ends occurs once.
+# ordered pair of ends occurs once. The twin of the dart with the r-th smallest
+# (tail, head) key is the dart with the r-th smallest (head, tail) key; both
+# orders come from two counting sorts, so the pairing is `O(n + m)` in the worst
+# case and needs no hashing.
 function _match_pending_twins!(h::DartGraph)
-    base = h.n + 1
-    pending = Dict{Int,Int}()
-    sizehint!(pending, ndarts(h) >>> 1)
-    for d = 1:ndarts(h)
-        key = tail(h, d) * base + h.head[d]
-        haskey(pending, key) && throw(ArgumentError("parallel edges are not supported"))
-        pending[key] = d
-    end
-    for d = 1:ndarts(h)
+    darts = collect(1:ndarts(h))
+    by_head = _counting_sort(darts, h.head, h.n)
+    by_tail = _counting_sort(darts, h.tail, h.n)
+    forward = _counting_sort(by_head, h.tail, h.n)
+    backward = _counting_sort(by_tail, h.head, h.n)
+    for r in eachindex(forward)
+        d = forward[r]
+        e = backward[r]
+        h.tail[d] == h.head[e] && h.head[d] == h.tail[e] ||
+            throw(ArgumentError("inconsistent rotation system"))
+        r > 1 &&
+            _same_ends(h, d, forward[r-1]) &&
+            throw(ArgumentError("parallel edges are not supported"))
         h.twin[d] == 0 || continue
-        e = get(pending, h.head[d] * base + tail(h, d), 0)
-        e == 0 && throw(ArgumentError("inconsistent rotation system"))
-        e == d && throw(ArgumentError("self-loops are not supported"))
         h.twin[d] = e
         h.twin[e] = d
     end
     return h
+end
+
+_same_ends(h::DartGraph, d::Integer, e::Integer) =
+    h.tail[d] == h.tail[e] && h.head[d] == h.head[e]
+
+# Stable counting sort of `items` by `key[item]`, keys in `1:n`.
+function _counting_sort(items::Vector{Int}, key::Vector{Int}, n::Integer)
+    start = zeros(Int, n + 1)
+    for x in items
+        start[key[x]+1] += 1
+    end
+    for k = 1:n
+        start[k+1] += start[k]
+    end
+    out = Vector{Int}(undef, length(items))
+    for x in items
+        k = key[x]
+        start[k] += 1
+        out[start[k]] = x
+    end
+    return out
 end
 
 """

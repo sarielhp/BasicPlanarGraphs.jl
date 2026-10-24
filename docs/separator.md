@@ -6,7 +6,8 @@ separator(g; balance = 2/3) -> (A, B, C)
 
 Computes a balanced vertex separator of a planar graph in linear time, following
 R. J. Lipton and R. E. Tarjan, *A Separator Theorem for Planar Graphs*, SIAM J.
-Appl. Math. 36(2), 1979.
+Appl. Math. 36(2), 1979. The implementation follows the proof of the theorem, so
+the guarantees below are worst case, for every input, and need no retries.
 
 ## Guarantees
 
@@ -16,129 +17,134 @@ For `n = nv(g)` the three returned vectors:
    disjoint, each sorted ascending;
 2. **separate** `A` from `B`: no edge has one end in `A` and the other in `B`
    (`C` may have edges to either);
-3. are **balanced**: `max(|A|, |B|) <= balance * n`;
-4. have a **small separator**: `|C| = O(sqrt(n))`. On the graphs in the test
-   suite, `|C| <= 2*sqrt(2n) + 1`.
+3. are **balanced**: `max(|A|, |B|) <= balance * n`, always;
+4. have a **small separator**: `|C| <= 2*sqrt(2n)`, always.
 
-`balance` must lie in `(0, 1)`; anything else throws an `ArgumentError`.
+`balance` must lie in `[2/3, 1)`; anything else throws an `ArgumentError`. `2/3`
+is what the theorem proves, so a smaller value cannot be promised. A larger
+value does not change the algorithm, it only lets the final pruning step move
+more separator vertices into `A` and `B`.
 
-The result is deterministic: the same graph gives the same partition on every
-call. The algorithm uses only adjacency, so the rotation system affects BFS
-visit order and therefore tie-breaking, not correctness.
+The running time is `O(n)` in the worst case: no hashing, no comparison sorts,
+no loop whose trip count depends on the input (see [Complexity](#complexity)).
+The result is deterministic.
 
-Two structural notes:
-
-- Validity is **structural, not asserted**. Every returned partition comes from
-  `_split_and_pack`, which takes the connected components of `G \ C` and packs
-  them into two bins of nearly equal size. Components are separated by
-  construction, so there can be no `A`–`B` edge whatever `C` contains.
-- The work goes into *balance* and *size*: the algorithm chooses `C`, then keeps
-  growing it until the packing fits.
+The input must be a planar embedding. A rotation system of higher genus is
+detected (Euler's formula fails, or the dual of the non-tree edges is not a
+tree) and reported as an `ArgumentError`.
 
 ## The algorithm
 
 ### 1. Level structure
 
-Breadth-first search from a root gives levels `L(0), L(1), ...`. The separator
-combines two levels with a middle band:
+Breadth-first search from a root gives levels `L(0), L(1), ...`:
 
-- `l1` is the first level whose prefix reaches `n/2` vertices;
-- `l0 <= l1` is the largest level with `|L(l0)| + 2(l1 - l0) <= 2*sqrt(k)`,
-  where `k` is the number of vertices on levels `0..l1`;
+- `l1` is the first level whose prefix reaches `n/2` vertices, and `k` is the
+  number of vertices on levels `0..l1`;
+- `l0 <= l1` is the largest level with `|L(l0)| + 2(l1 - l0) <= 2*sqrt(k)`;
 - `l2 >= l1 + 1` is the smallest level with
   `|L(l2)| + 2(l2 - l1 - 1) <= 2*sqrt(n - k)`.
 
-This is Theorem 4's choice: the two levels are small enough, and everything
-below `l0` or above `l2` is already a modest fraction of the graph.
+Both levels exist (this is the counting argument of the theorem), and the tests
+are done in integer arithmetic. The vertices below `l0` are fewer than `n/2`, and
+so are those above `l2`; the **band** is `L(l0+1) .. L(l2-1)`.
 
 ### 2. The base separator
 
-`C = L(l0) ∪ L(l2)`; the band is `L(l0+1) .. L(l2-1)`. If the band alone has at
-most `balance * n` vertices, the base separator is already enough and the packing
-decides the split.
+`C = L(l0) ∪ L(l2)`. If the band has at most `2n/3` vertices, every component of
+`G - C` has at most `2n/3` vertices and the separator is complete. Otherwise a
+cycle through the band is added.
 
-### 3. Cutting the band
+### 3. The balanced cycle (Lemma 2)
 
-Otherwise the band is too big, and a cycle through the band is added to the
-separator (Lemmas 2 and 3):
+Lemma 2 needs a triangulation. Instead of adding edges, every face with four or
+more sides gets a virtual **star** vertex joined to all its corners. This works
+for any connected plane graph, including bridges and cut vertices (a repeated
+corner just gives parallel star edges). The spanning tree is the BFS tree of the
+input, with each star hanging off it as a leaf, so fundamental cycles keep the
+BFS depth bound: the band vertices on one are at most `2(l2 - l0 - 1)`, and
+`|C| <= [|L(l0)| + 2(l1 - l0)] + [|L(l2)| + 2(l2 - l1 - 1)] <= 2sqrt(k) + 2sqrt(n-k)
+<= 2*sqrt(2n)`.
 
-- the band is **triangulated** in place, keeping the rotation system;
-- the darts that belong to the BFS tree of the whole search are marked; the
-  remaining darts form a spanning tree of the dual;
-- each face is **weighted** by the band vertices incident to it, so the weight of
-  the faces inside a cycle bounds the band vertices strictly inside it;
-- a post-order pass computes the subtree weight of every dual edge, and the dual
-  edges whose removal splits the dual most evenly are ranked;
-- the fundamental cycle of a non-tree edge splits the band into two parts; its
-  primal path is a candidate separator. When the path runs through the shrunk
-  levels (already part of `C`), only the two tree paths are kept.
+The non-tree edges form a spanning tree of the dual, whose nodes are the
+triangles (at most three neighbours each). A dual edge splits the band vertices
+into those strictly on one side (all their triangles there), those strictly on
+the other, and those on the cycle. An edge is *balanced* when each strict side
+has at most `2/3` of the band vertices. The existence argument: orient every
+unbalanced edge toward its heavy side; walking those orientations ends at a
+triangle with at most three branches, and a vertex is strictly inside at most
+`k - 1` of its `k` sides (every band vertex has at least two triangles, so it
+has one in some branch), so the `k` sides cannot all be heavy: heavy means
+strictly more than `2/3` of the band, and `k - 1 <= 2k/3` for `k <= 3`. Hence a balanced edge exists, and the walk finds it.
 
-At most six candidates are examined (`MAX_CYCLE_CANDIDATES`): the first one that
-makes both sides fit wins, otherwise the best one by largest side is kept.
+The walk starts at a root triangle and moves to the child whose side is heavy.
+Per-vertex counters of how many triangles lie in the current region give the
+strict counts exactly: the largest child is measured by *removing* the current
+triangle and the small subtrees from the region, the small children from
+scratch. A step costs the size of its small subtrees, and the region shrinks by
+them, so the total over the walk is `O(#triangles)`.
 
-A band that cannot be triangulated (it is not 2-connected — a face that is not a
-simple cycle) contributes no cycle candidates; the level separator has to do on
-its own, and refinement takes over.
+The cycle's band vertices (the BFS tree path between the endpoints of the
+balanced edge, restricted to the band) are added to `C`. The Jordan curve of the
+cycle separates the strictly-inside band vertices from the strictly-outside
+ones, and the band touches the rest of the graph only through `L(l0)` and
+`L(l2)`, both in `C`.
 
-### 4. Refinement
+### 4. Packing
 
-After packing, if a side is still larger than `balance * n` the separator is
-grown: the largest remaining component is separated recursively by the same
-procedure and the two separators are merged. Components shrink by a constant
-factor per pass, so the added vertices sum to `O(sqrt(n))`. The loop is bounded
-by `MAX_REFINEMENTS = 32`, and it stops early when a pass adds nothing.
+Every component of `G - C` has at most `2n/3` vertices, and together they have
+at most `n`. A component with at least `n/3` vertices goes alone into `A` and the
+rest into `B`; otherwise components fill `A` until it passes `n/3` (so it stays
+below `2n/3`) and the rest go to `B`. Both bins are at most `2n/3`.
 
-### 5. Choosing the root
+### 5. Pruning
 
-The quality of the level structure depends strongly on the BFS root. Four roots
-are tried — the original root, a farthest vertex, the midpoint of a BFS path (the
-centroid on tree-like graphs) and the farthest vertex from that midpoint — and
-the best result is kept. Candidates are ranked by
+A vertex of `C` with no neighbour in `B` can join `A` (and symmetrically), as
+long as the side stays within `balance * n`. One pass over `C` reaches a fixed
+point, because moving a vertex into a side can only block other vertices from the
+opposite side, never free them. This removes redundant vertices: a path gives
+one separator vertex, a cycle two, and a `k x k` grid `k - 1`.
 
-1. balanced before unbalanced,
-2. smaller `|C|`,
-3. smaller `max(|A|, |B|)`.
+### 6. Choosing the root
 
-That is a constant four passes, not a factor of `n`.
+The size of the level structure depends on the BFS root, so four roots are tried
+(the original root, a farthest vertex, the midpoint of a BFS path, and the
+farthest vertex from that midpoint) and the partition with the smallest
+separator after pruning is kept. Every root satisfies the guarantees; the choice
+is a constant factor in time, not in the bound.
 
-### 6. Disconnected inputs
+### 7. Disconnected inputs
 
-Disconnected graphs follow the end of the proof of Theorem 4. With components
-sorted by size and `n` the total:
-
-| Largest component | Result |
-|---|---|
-| larger than `balance * n` | separate that component recursively; its two sides join the corresponding sides and the rest of the graph goes to the larger one |
-| at least `n/3` | that component is one side, the other components the other side, `C = ∅` |
-| smaller | components are packed greedily into two sides, in decreasing size, `C = ∅` |
-
-Degenerate sizes are handled directly: `n == 0` returns three empty vectors, and
-`n <= 2` puts every vertex into `C`.
+Components are labelled first. If the largest component has at most `2n/3`
+vertices no separator is needed, and packing alone splits the graph with
+`C = ∅`. Otherwise the separator of the largest component (as above, with `n`
+replaced by its size) is the separator of the graph: its pieces have at most
+`2/3` of that component, and everything else has fewer than `n/3`, so packing
+works as in step 4. `n <= 2` is handled directly (pruning leaves one separator
+vertex for a single edge).
 
 ## Complexity
 
-Each stage is one pass over vertices, darts or faces:
+Every stage is a pass over vertices, darts or triangles of the virtual
+triangulation (fewer than `2m` of them):
 
-- BFS and level bookkeeping: `O(n + m)` per root, four roots;
-- band triangulation and dual spanning tree: `O(n + m)` for the band;
-- packing and refinement: `O(n + m)` per pass, at most 32 passes, and passes stop
-  as soon as the partition is balanced.
+- BFS and levels: `O(n + m)` per root, four roots plus three for the roots;
+- faces and triangles: `O(n + m)`; the dual tree has no union-find, the cotree
+  of a spanning tree already is a tree;
+- the balanced-edge walk: `O(#triangles)`, as above;
+- packing and pruning: `O(n + m)`; conversion from `PlanarGraph` matches twin
+  darts with two counting sorts, so it is `O(n + m)` in the worst case, not in
+  expectation.
 
-So the running time is `O(n + m)` with a small constant, not a function of the
-number of passes in practice. Indicative timings on one development machine:
-about 0.2 s for a `320 x 320` grid (`n = 102400`) and for a random triangulation
-with `n = 32000`.
+Indicative timings on one development machine: about 0.3 s for a `500 x 500`
+grid and 1.4 s for `10^6` vertices; random triangulations with a random vertex
+numbering are slower per vertex because of cache misses, not because of the
+algorithm.
 
 ## Usage notes
 
-- The input must be a `PlanarGraph`, not a bare `SimpleGraph`. The embedding is
-  used for adjacency only, so a graph built from a planar layout works even if
-  you never needed the rotation system otherwise.
-- A looser `balance` (for example `0.75`) generally means a smaller `C`; a
-  tighter one may force refinement and a larger separator, and extremely small
-  values can make the guarantee impossible to meet.
-- Vertices in `A`, `B` and `C` are sorted; use `findall`/indexing rather than
-  assuming anything about the order beyond that.
+- The input must be a `PlanarGraph`, not a bare `SimpleGraph`.
+- Vertices in `A`, `B` and `C` are sorted.
 - If you need components rather than a partition, use the graph interface:
   `connected_components(SimpleGraph(g))` from `Graphs.jl`.
 
@@ -148,5 +154,5 @@ A, B, C = separator(g)
 
 isempty(intersect(A, B))                     # partition and separation
 maximum([length(A), length(B)]) <= 2/3 * nv(g)
-length(C) <= 2 * sqrt(2 * nv(g)) + 1
+length(C) <= 2 * sqrt(2 * nv(g))
 ```

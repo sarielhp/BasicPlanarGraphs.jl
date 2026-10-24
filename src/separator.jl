@@ -1,28 +1,40 @@
 # Lipton-Tarjan planar separator.
 #
 # Reference: R. J. Lipton and R. E. Tarjan, "A Separator Theorem for Planar
-# Graphs", SIAM J. Appl. Math. 36(2), 1979. Lemma 2 (fundamental cycles of a
-# bounded-radius tree), Lemma 3 (two levels plus the middle band) and Theorem 4
-# (the algorithm).
+# Graphs", SIAM J. Appl. Math. 36(2), 1979. Lemma 2 (a balanced fundamental
+# cycle), Lemma 3 (two levels plus the middle band) and Theorem 4 (the
+# algorithm).
 #
-# Every stage is a single pass over vertices, darts or faces, so the running
-# time is O(n + m).
+# The implementation follows the proof, so both guarantees are worst case and
+# deterministic, with no retries and no refinement loop:
+#
+#   * every component left by the separator has at most `2n/3` vertices, and
+#   * the separator before pruning has at most `2*sqrt(2n)` vertices.
+#
+# Running time is `O(n)`: every stage is a pass over vertices, darts or the
+# triangles of the virtual triangulation, and the search for the balanced cycle
+# touches each triangle a constant number of times (see `_search_edge`).
+#
+# Lemma 2 needs a triangulation. Instead of adding edges to the graph, every
+# face with four or more sides gets a virtual *star* vertex joined to all its
+# corners. This works for any connected plane graph, including graphs with
+# bridges and cut vertices, and it keeps the BFS tree of the input graph as the
+# spanning tree: each star hangs off the tree as a leaf. The triangles of the
+# result are the nodes of the dual tree that the search walks.
 
 const DEFAULT_BALANCE = 2 / 3
-
-# Candidate fundamental cycles to examine around the middle band. The first
-# balanced one wins; this is a small constant, not a factor of n.
-const MAX_CYCLE_CANDIDATES = 6
 
 """
     separator(g; balance = 2/3) -> (A, B, C)
 
 Balanced vertex separator of the embedded planar graph `g`, computed by the
-linear-time Lipton-Tarjan algorithm.
+Lipton-Tarjan algorithm in `O(nv(g))` time.
 
 The three returned vectors partition `vertices(g)`: no edge joins `A` to `B`,
-`|A|` and `|B|` are at most `balance * nv(g)`, and `|C| = O(sqrt(nv(g)))`
-(at most `2*sqrt(2*nv(g))` for well-behaved inputs).
+`|A|` and `|B|` are at most `balance * nv(g)`, and `|C| <= 2*sqrt(2*nv(g))`.
+All three hold for every input, not only for well-behaved ones. `balance` must
+lie in `[2/3, 1)`: `2/3` is what the theorem guarantees, and a larger value only
+lets the final pruning step move more separator vertices into `A` and `B`.
 
 ```julia
 g = planar_grid(20, 20)
@@ -32,570 +44,581 @@ length(C) <= 2 * sqrt(2 * nv(g))    # true
 ```
 """
 function separator(g::PlanarGraph; balance::Real = DEFAULT_BALANCE)
-    0 < balance < 1 || throw(ArgumentError("balance must lie in (0, 1), got $balance"))
+    2 / 3 <= balance < 1 ||
+        throw(ArgumentError("balance must lie in [2/3, 1), got $balance"))
     n = nv(g)
     n == 0 && return (Int[], Int[], Int[])
-    dg = DartGraph(g)
-    label, ncomps = component_labels(dg)
-    ncomps <= 1 && return _best_connected(dg, balance)
-    return _separator_disconnected(dg, label, ncomps, balance)
+    cap = max(floor(Int, balance * n), (2 * n) ÷ 3)
+    return _unpack(_best_partition(DartGraph(g), cap))
 end
 
-# --- connected case ------------------------------------------------------
+# --- candidates and partitions -------------------------------------------
 
-# Bounds on the refinement loop: each pass separates the largest remaining
-# component, so the sizes shrink fast and a handful of passes always suffice.
-const MAX_REFINEMENTS = 32
-
-# The level structure, and with it the quality of the separator, depends
-# strongly on the BFS root, so a few roots are tried and the best result is
-# kept. The candidates are the endpoints and the midpoint of a BFS
-# pseudo-diameter: on tree-like graphs that is the centroid.
-function _best_connected(dg::DartGraph, balance::Real)
-    best = _separator_connected(dg, 1, balance, 0)
-    best_key = _candidate_key(best, dg.n, balance)
-    for root in _root_candidates(dg, 1)[2:end]
-        candidate = _separator_connected(dg, root, balance, 0)
-        key = _candidate_key(candidate, dg.n, balance)
-        if key < best_key
-            best = candidate
-            best_key = key
+# Every root gives a valid separator; the smallest result after packing and
+# pruning wins. The number of roots is a constant, so the work stays linear.
+function _best_partition(dg::DartGraph, cap::Int)
+    label, ncomps = component_labels(dg)
+    candidates =
+        ncomps == 1 ? _connected_separators(dg) : _big_component_separators(dg, label)
+    best = Int8[]
+    best_size = typemax(Int)
+    for separator in candidates
+        side = _partition(dg, separator, cap)
+        size = count(iszero, side)
+        if size < best_size
+            best = side
+            best_size = size
         end
     end
     return best
 end
 
-# Balanced results first, then the smallest separator, then the best split.
-function _candidate_key(candidate, n::Integer, balance::Real)
-    a, b, c = candidate
-    unbalanced = _is_balanced(candidate, n, balance) ? 0 : 1
-    return (unbalanced, length(c), max(length(a), length(b)))
-end
-
-function _root_candidates(dg::DartGraph, root::Integer)
-    far, = _farthest(dg, root)
-    mid = _midpoint(dg, far)
-    far2, = _farthest(dg, mid)
-    return unique(Int[root, far, mid, far2])
-end
-
-# A farthest vertex from `source`, with the BFS tree that reaches it.
-function _farthest(dg::DartGraph, source::Integer)
-    parent, _, depth, order = bfs_tree(dg, [source])
-    best = source
-    for v in order
-        depth[v] > depth[best] && (best = v)
+# Only a component with more than `2n/3` vertices has to be cut; the others
+# already fit, and the packing step distributes them.
+function _big_component_separators(dg::DartGraph, label::Vector{Int})
+    sizes = zeros(Int, maximum(label))
+    for l in label
+        sizes[l] += 1
     end
-    return best, parent, depth
+    big = argmax(sizes)
+    3 * sizes[big] <= 2 * dg.n && return [Int[]]
+    sub, ids = induced(dg, label .== big)
+    return [Int[ids[v] for v in sep] for sep in _connected_separators(sub)]
 end
 
-# Vertex half way along the BFS path from the farthest vertex back to `source`.
-function _midpoint(dg::DartGraph, source::Integer)
-    far, parent, depth = _farthest(dg, source)
-    v = far
-    for _ = 1:(depth[far]÷2)
+function _unpack(side::Vector{Int8})
+    return findall(==(1), side), findall(==(2), side), findall(iszero, side)
+end
+
+# --- connected case ------------------------------------------------------
+
+# The level structure, and with it the size of the separator, depends on the
+# BFS root, so a few roots are tried: the endpoints and the midpoint of a BFS
+# pseudo-diameter, which is the centroid on tree-like graphs.
+function _connected_separators(dg::DartGraph)
+    dg.n <= 2 && return [collect(1:dg.n)]
+    tri = _triangles(dg)
+    return [_level_separator(dg, tri, root) for root in _root_candidates(dg)]
+end
+
+function _root_candidates(dg::DartGraph)
+    far = _bfs(dg, 1).order[end]
+    sweep = _bfs(dg, far)
+    mid = _ancestor(sweep.parent, sweep.order[end], sweep.depth[sweep.order[end]] ÷ 2)
+    return unique(Int[1, far, mid, _bfs(dg, mid).order[end]])
+end
+
+function _ancestor(parent::Vector{Int}, v::Int, steps::Int)
+    for _ = 1:steps
         v = parent[v]
     end
     return v
 end
 
-function _separator_connected(dg::DartGraph, root::Integer, balance::Real)
-    return _separator_connected(dg, root, balance, 0)
-end
-
-function _separator_connected(dg::DartGraph, root::Integer, balance::Real, depth::Integer)
-    n = dg.n
-    n == 0 && return (Int[], Int[], Int[])
-    n <= 2 && return (Int[], Int[], collect(1:n))
-    removed = _initial_separator(dg, root, balance)
-    return _refine(dg, removed, balance, depth)
-end
-
-# Separator of Theorem 4 before refinement: the two levels, plus a balanced
-# cycle of the middle band when the band alone is larger than `balance * n`.
-function _initial_separator(dg::DartGraph, root::Integer, balance::Real)
-    n = dg.n
-    levels = level_structure(dg, [root])
-    l0, l2 = _level_plan(levels.depth, n)
-    _, mid, _, base = _level_parts(levels.depth, l0, l2)
-    length(mid) <= balance * n && return base
-    best = base
-    best_score = _largest_side(dg, base)
-    for cycle in _band_cycles(dg, levels, l0, l2)
-        candidate = _merge_vertices(base, cycle, n)
-        score = _largest_side(dg, candidate)
-        score <= balance * n && return candidate
-        if score < best_score
-            best = candidate
-            best_score = score
+# Breadth-first search from `root`; the graph is connected, so `order` lists
+# every vertex.
+function _bfs(dg::DartGraph, root::Int)
+    parent = zeros(Int, dg.n)
+    parent_dart = zeros(Int, dg.n)
+    depth = fill(-1, dg.n)
+    depth[root] = 0
+    order = Int[root]
+    sizehint!(order, dg.n)
+    for v in order
+        for d in incident_darts(dg, v)
+            w = dg.head[d]
+            depth[w] == -1 || continue
+            depth[w] = depth[v] + 1
+            parent[w] = v
+            parent_dart[w] = d
+            push!(order, w)
         end
     end
-    return best
+    return (; parent, parent_dart, depth, order)
 end
 
-function _largest_side(dg::DartGraph, removed::Vector{Int})
-    a, b, _ = _split_and_pack(dg, removed)
-    return max(length(a), length(b))
-end
-
-# Grow the separator until both sides fit into `balance * n`: the largest
-# remaining component is split by the same algorithm. The components shrink by
-# a constant factor each pass, so the added separators sum to O(sqrt(n)).
-function _refine(dg::DartGraph, removed::Vector{Int}, balance::Real, depth::Integer)
+# Theorem 4: the vertices of levels `l0` and `l2`, plus the band vertices of a
+# balanced cycle when the band between them is larger than `2n/3`.
+function _level_separator(dg::DartGraph, tri, root::Int)
     n = dg.n
-    candidate = _split_and_pack(dg, removed)
-    _is_balanced(candidate, n, balance) && return candidate
-    (depth >= MAX_REFINEMENTS || length(removed) >= n) && return candidate
-    comps = components_without(dg, _mask(removed, n))
-    isempty(comps) && return candidate
-    biggest = comps[argmax(length.(comps))]
-    length(biggest) < 3 && return candidate
-    sub, ids = induced(dg, _mask(biggest, n))
-    _, _, extra = _separator_connected(sub, 1, balance, depth + 1)
-    merged = _merge_vertices(removed, Int[ids[v] for v in extra], n)
-    length(merged) == length(removed) && return candidate
-    return _refine(dg, merged, balance, depth + 1)
-end
-
-function _mask(vertices::Vector{Int}, n::Integer)
-    mask = falses(n)
-    for v in vertices
-        mask[v] = true
-    end
-    return mask
-end
-
-# Levels l0 and l2 of Theorem 4.
-function _level_plan(level::Vector{Int}, n::Integer)
-    counts = _level_counts(level)
-    l1 = _middle_level(counts, n)
-    k = _cumulative(counts, l1)
-    l0 = _lower_level(counts, l1, k)
-    l2 = _upper_level(counts, l1, n - k)
-    return l0, l2
-end
-
-"""
-Split the vertices by level: below `l0`, strictly between `l0` and `l2`, above
-`l2`, and the two boundary levels themselves (the separator).
-"""
-function _level_parts(level::Vector{Int}, l0::Int, l2::Int)
-    low = Int[]
-    mid = Int[]
-    high = Int[]
-    base = Int[]
-    for v in eachindex(level)
-        lv = level[v]
-        if lv == l0 || lv == l2
-            push!(base, v)
-        elseif lv < l0
-            push!(low, v)
-        elseif lv > l2
-            push!(high, v)
-        else
-            push!(mid, v)
-        end
-    end
-    return low, mid, high, base
+    tree = _bfs(dg, root)
+    l0, l2 = _level_plan(_level_counts(tree.depth), n)
+    base = Int[v for v = 1:n if tree.depth[v] == l0 || tree.depth[v] == l2]
+    band = BitVector(l0 < tree.depth[v] < l2 for v = 1:n)
+    width = count(band)
+    3 * width <= 2 * n && return base
+    return vcat(base, _band_cycle(dg, tri, tree, band, width))
 end
 
 # --- level bookkeeping ---------------------------------------------------
 
 # counts[l + 1] = number of vertices on BFS level l.
-function _level_counts(level::Vector{Int})
-    counts = zeros(Int, maximum(level) + 1)
-    for v in eachindex(level)
-        counts[level[v]+1] += 1
+function _level_counts(depth::Vector{Int})
+    counts = zeros(Int, maximum(depth) + 1)
+    for lv in depth
+        counts[lv+1] += 1
     end
     return counts
 end
 
-# Number of vertices on levels 0 through l (levels outside 0:r are empty).
-function _cumulative(counts::Vector{Int}, l::Int)
-    l < 0 && return 0
-    l >= length(counts) && return sum(counts)
-    return sum(counts[1:(l+1)])
+# Levels l0 and l2 of Theorem 4. Level `l1` is where the prefix sum first
+# reaches `n/2`, so the levels below `l0` and above `l2` each hold at most half
+# of the vertices.
+function _level_plan(counts::Vector{Int}, n::Int)
+    l1 = _middle_level(counts, n)
+    k = sum(view(counts, 1:(l1+1)))
+    return _lower_level(counts, l1, k), _upper_level(counts, l1, n - k)
 end
 
 function _level_size(counts::Vector{Int}, l::Int)
     return 0 <= l < length(counts) ? counts[l+1] : 0
 end
 
-# Level whose prefix first reaches half of the vertices.
-function _middle_level(counts::Vector{Int}, n::Integer)
+function _middle_level(counts::Vector{Int}, n::Int)
     acc = 0
     for l = 0:(length(counts)-1)
         acc += counts[l+1]
-        acc >= n / 2 && return l
+        2 * acc >= n && return l
     end
     return length(counts) - 1
 end
 
-# Level l0 <= l1 with |L(l0)| + 2(l1 - l0) <= 2 sqrt(k), as in Theorem 4.
-function _lower_level(counts::Vector{Int}, l1::Int, k::Integer)
-    limit = 2 * sqrt(k)
+# Level l0 <= l1 with |L(l0)| + 2(l1 - l0) <= 2 sqrt(k). Squared, so exact.
+function _lower_level(counts::Vector{Int}, l1::Int, k::Int)
     l = l1
-    while l >= 0 && _level_size(counts, l) + 2 * (l1 - l) > limit
+    while l >= 0 && (_level_size(counts, l) + 2 * (l1 - l))^2 > 4 * k
         l -= 1
     end
     return l
 end
 
 # Level l2 >= l1 + 1 with |L(l2)| + 2(l2 - l1 - 1) <= 2 sqrt(n - k).
-function _upper_level(counts::Vector{Int}, l1::Int, rest::Integer)
-    limit = 2 * sqrt(rest)
+function _upper_level(counts::Vector{Int}, l1::Int, rest::Int)
     last = length(counts) - 1
     l = l1 + 1
-    while l <= last && _level_size(counts, l) + 2 * (l - l1 - 1) > limit
+    while l <= last && (_level_size(counts, l) + 2 * (l - l1 - 1))^2 > 4 * rest
         l += 1
     end
     return l
 end
 
-# --- middle band: fundamental cycles -------------------------------------
+# --- the virtual triangulation -------------------------------------------
 
-"""
-Candidate cycles that split the middle band. The band (levels `l0+1 .. l2-1`)
-is triangulated in place and cut by the fundamental cycle of the non-tree edge
-whose dual subtree is most balanced, as in Lemma 2.
-"""
-function _band_cycles(dg::DartGraph, levels::LevelStructure, l0::Int, l2::Int)
-    n = dg.n
-    keep = BitVector(l0 < levels.depth[v] < l2 for v = 1:n)
-    any(keep) || return Vector{Vector{Int}}()
-    h = _band_triangulation(restrict(dg, keep))
-    h === nothing && return Vector{Vector{Int}}()
-    tree = _tree_dart_mask(h, levels, keep)
-    _, face_of = face_orbits(h)
-    weights = _face_weights(h, face_of, levels, l0, l2)
-    sum(weights) == 0 && return Vector{Vector{Int}}()
-    adj = _dual_spanning_tree(h, face_of, tree)
-    roots = _forest_roots(levels, l0)
-    return _candidate_cycles(h, adj, weights, levels, roots)
+# Triangles of the graph in which every face with four or more sides is
+# replaced by a fan around a star vertex. A face with `k >= 4` darts
+# `d_1 .. d_k` (corners `a_j = tail(d_j)`) becomes the triangles
+# `(s, a_j, a_{j+1})`, numbered `tbase + j - 1`; a triangular face stays one
+# triangle. Stars have no cost, so a triangle lists only its real vertices
+# (`vc == 0` for the triangles of a star).
+struct _Triangles
+    ntri::Int
+    orbits::Vector{Vector{Int}}
+    tbase::Vector{Int}
+    dart_tri::Vector{Int}   # the triangle on the left of each dart
+    deg::Vector{Int}        # number of triangles at each real vertex
+    va::Vector{Int}
+    vb::Vector{Int}
+    vc::Vector{Int}
 end
 
-# Triangulating the band needs it to be 2-connected; when it is not, the cycles
-# of the band cannot be used and the level separator has to do on its own.
-function _band_triangulation(band::DartGraph)
-    try
-        return triangulate(band)
-    catch err
-        err isa ArgumentError || rethrow()
-        return nothing
+function _triangles(dg::DartGraph)
+    orbits, _ = face_orbits(dg)
+    dg.n - nedges(dg) + length(orbits) == 2 || throw(_not_planar_error())
+    tbase = Vector{Int}(undef, length(orbits))
+    ntri = 0
+    for (f, orbit) in enumerate(orbits)
+        tbase[f] = ntri + 1
+        ntri += length(orbit) == 3 ? 1 : length(orbit)
     end
-end
-
-# Mark the darts of `h` that belong to the BFS tree of the whole graph.
-function _tree_dart_mask(h::DartGraph, levels::LevelStructure, keep::BitVector)
-    mask = falses(ndarts(h))
-    for v in eachindex(levels.parent)
-        keep[v] || continue
-        p = levels.parent[v]
-        (p == 0 || !keep[p]) && continue
-        for d in darts_of(h, v)
-            h.head[d] == p || continue
-            mask[d] = true
-            mask[h.twin[d]] = true
-            break
-        end
+    tri = _Triangles(
+        ntri,
+        orbits,
+        tbase,
+        zeros(Int, ndarts(dg)),
+        zeros(Int, dg.n),
+        zeros(Int, ntri),
+        zeros(Int, ntri),
+        zeros(Int, ntri),
+    )
+    for f in eachindex(orbits)
+        _fill_face!(tri, dg, f)
     end
-    return mask
+    return tri
 end
 
-# Each band vertex contributes one unit to one incident face, so the weight of
-# the faces inside a cycle bounds the band vertices strictly inside it.
-function _face_weights(
-    h::DartGraph,
-    face_of::Vector{Int},
-    levels::LevelStructure,
-    l0::Int,
-    l2::Int,
-)
-    weights = zeros(Int, maximum(face_of; init = 0))
-    for v = 1:h.n
-        d = h.first[v]
+function _fill_face!(tri::_Triangles, dg::DartGraph, f::Int)
+    orbit = tri.orbits[f]
+    k = length(orbit)
+    k >= 3 || throw(ArgumentError("a face with fewer than three sides"))
+    corner(j) = dg.tail[orbit[mod1(j, k)]]
+    for j = 1:k
+        tri.deg[corner(j)] += k == 3 ? 1 : 2
+        tri.dart_tri[orbit[j]] = k == 3 ? tri.tbase[f] : tri.tbase[f] + j - 1
+    end
+    for j = 1:(k==3 ? 1 : k)
+        t = tri.tbase[f] + j - 1
+        tri.va[t] = corner(j)
+        tri.vb[t] = corner(j + 1)
+        k == 3 && (tri.vc[t] = corner(3))
+    end
+    return nothing
+end
+
+# --- the dual tree -------------------------------------------------------
+
+# The edges of the virtual triangulation that are not in the spanning tree are
+# the edges of a spanning tree of the dual (the triangles). A triangle has three
+# sides, so it has at most three dual neighbours; `ep[e], eq[e]` are the real
+# vertices whose tree path closes the fundamental cycle of dual edge `e`.
+struct _Dual
+    nbr::Vector{Int}
+    eid::Vector{Int}
+    cnt::Vector{Int}
+    ep::Vector{Int}
+    eq::Vector{Int}
+end
+
+function _link!(dual::_Dual, t1::Int, t2::Int, p::Int, q::Int)
+    push!(dual.ep, p)
+    push!(dual.eq, q)
+    for (a, b) in ((t1, t2), (t2, t1))
+        slot = 3 * (a - 1) + (dual.cnt[a] += 1)
+        dual.nbr[slot] = b
+        dual.eid[slot] = length(dual.ep)
+    end
+    return nothing
+end
+
+function _dual_tree(dg::DartGraph, tri::_Triangles, parent_dart::Vector{Int})
+    nt = tri.ntri
+    dual = _Dual(zeros(Int, 3nt), zeros(Int, 3nt), zeros(Int, nt), Int[], Int[])
+    in_tree = falses(ndarts(dg))
+    for d in parent_dart
         d == 0 && continue
-        (l0 < levels.depth[v] < l2) || continue
-        weights[face_of[d]] += 1
+        in_tree[d] = true
+        in_tree[dg.twin[d]] = true
     end
-    return weights
+    for d = 1:ndarts(dg)
+        e = dg.twin[d]
+        (d < e && !in_tree[d]) || continue
+        _link!(dual, tri.dart_tri[d], tri.dart_tri[e], dg.tail[d], dg.head[d])
+    end
+    _link_stars!(dual, dg, tri)
+    length(dual.ep) == nt - 1 || throw(_not_planar_error())
+    return dual
 end
 
-# Spanning tree of the dual made of the primal non-tree darts.
-function _dual_spanning_tree(h::DartGraph, face_of::Vector{Int}, tree::BitVector)
-    nf = maximum(face_of; init = 0)
-    dsu = collect(1:nf)
-    adj = [Tuple{Int,Int}[] for _ = 1:nf]
-    for d = 1:ndarts(h)
-        (d < h.twin[d] && !tree[d]) || continue
-        f1 = face_of[d]
-        f2 = face_of[h.twin[d]]
-        f1 == f2 && continue
-        a = _find_root!(dsu, f1)
-        b = _find_root!(dsu, f2)
-        a == b && continue
-        dsu[a] = b
-        push!(adj[f1], (f2, d))
-        push!(adj[f2], (f1, d))
+# The first star edge of every star is its tree edge; the others join the
+# consecutive triangles of the fan, and their cycle closes through the tree
+# path from the first corner to the corner of that star edge.
+function _link_stars!(dual::_Dual, dg::DartGraph, tri::_Triangles)
+    for (f, orbit) in enumerate(tri.orbits)
+        length(orbit) == 3 && continue
+        first_corner = dg.tail[orbit[1]]
+        for j = 2:length(orbit)
+            t = tri.tbase[f] + j - 1
+            _link!(dual, t - 1, t, first_corner, dg.tail[orbit[j]])
+        end
     end
-    return adj
+    return nothing
 end
 
-function _find_root!(dsu::Vector{Int}, x::Int)
-    while dsu[x] != x
-        dsu[x] = dsu[dsu[x]]
-        x = dsu[x]
-    end
-    return x
+# --- counting the vertices on each side of a dual edge -------------------
+
+# The triangles of a region of the dual tree, as seen by the band vertices: how
+# many triangles of each vertex lie in the region. A vertex is strictly inside
+# when all its triangles do (`full`), and outside when none does. Stamps make a
+# reset free.
+mutable struct _Region
+    count::Vector{Int}
+    stamp::Vector{Int}
+    epoch::Int
+    full::Int
+    touched::Int
 end
 
-# Root of the BFS subtree a band vertex belongs to (0 outside the band).
-function _forest_roots(levels::LevelStructure, l0::Int)
-    roots = zeros(Int, length(levels.parent))
-    for v in levels.order
-        levels.depth[v] > l0 || continue
-        p = levels.parent[v]
-        roots[v] = (p == 0 || levels.depth[p] <= l0) ? v : roots[p]
-    end
-    return roots
+_Region(n::Int) = _Region(zeros(Int, n), zeros(Int, n), 1, 0, 0)
+
+function _reset!(r::_Region)
+    r.epoch += 1
+    r.full = 0
+    r.touched = 0
+    return r
 end
 
-# Primal darts whose dual edge splits the dual tree most evenly.
-function _balanced_darts(adj::Vector{Vector{Tuple{Int,Int}}}, weights::Vector{Int})
-    nf = length(adj)
-    nf <= 1 && return Int[]
-    parent = zeros(Int, nf)
-    parent_dart = zeros(Int, nf)
+function _enter!(r::_Region, v::Int, deg::Vector{Int})
+    if r.stamp[v] != r.epoch
+        r.stamp[v] = r.epoch
+        r.count[v] = 0
+    end
+    c = r.count[v] + 1
+    r.count[v] = c
+    c == 1 && (r.touched += 1)
+    c == deg[v] && (r.full += 1)
+    return nothing
+end
+
+function _leave!(r::_Region, v::Int, deg::Vector{Int})
+    c = r.count[v]
+    c == deg[v] && (r.full -= 1)
+    r.count[v] = c - 1
+    c == 1 && (r.touched -= 1)
+    return nothing
+end
+
+mutable struct _Search
+    tri::_Triangles
+    dual::_Dual
+    band::BitVector
+    width::Int
+    parent::Vector{Int}
+    size::Vector{Int}
+    stack::Vector{Int}
+    region::_Region
+    scratch::_Region
+end
+
+function _apply_triangle!(op, r::_Region, s::_Search, t::Int)
+    for v in (s.tri.va[t], s.tri.vb[t], s.tri.vc[t])
+        (v != 0 && s.band[v]) && op(r, v, s.tri.deg)
+    end
+    return nothing
+end
+
+# Apply `op` to the triangles of the subtree of dual node `t`.
+function _each_below!(op, r::_Region, s::_Search, t::Int)
+    empty!(s.stack)
+    push!(s.stack, t)
+    while !isempty(s.stack)
+        u = pop!(s.stack)
+        _apply_triangle!(op, r, s, u)
+        for i = 1:s.dual.cnt[u]
+            w = s.dual.nbr[3*(u-1)+i]
+            w == s.parent[u] || push!(s.stack, w)
+        end
+    end
+    return nothing
+end
+
+# Parents and subtree sizes of the dual tree rooted at triangle 1.
+function _root_dual(dual::_Dual, nt::Int)
+    parent = zeros(Int, nt)
     order = Int[1]
-    seen = falses(nf)
-    seen[1] = true
-    for f in order
-        for (g, d) in adj[f]
-            seen[g] && continue
-            seen[g] = true
-            parent[g] = f
-            parent_dart[g] = d
-            push!(order, g)
+    sizehint!(order, nt)
+    for u in order
+        for i = 1:dual.cnt[u]
+            w = dual.nbr[3*(u-1)+i]
+            w == parent[u] && continue
+            parent[w] = u
+            push!(order, w)
         end
     end
-    length(order) == nf || return Int[]
-    subtree = copy(weights)
-    for i = length(order):-1:2
-        f = order[i]
-        subtree[parent[f]] += subtree[f]
+    length(order) == nt || throw(_not_planar_error())
+    size = ones(Int, nt)
+    for i = nt:-1:2
+        size[parent[order[i]]] += size[order[i]]
     end
-    total = sum(weights)
-    ranked = Tuple{Int,Int}[]
-    for i = 2:length(order)
-        f = order[i]
-        s = subtree[f]
-        push!(ranked, (max(s, total - s), parent_dart[f]))
-    end
-    # The keys are integers in 0:total, so a stable counting sort keeps the
-    # same order as the comparison sort in O(f + n) instead of O(f log f).
-    counts = zeros(Int, total + 1)
-    for (key, _) in ranked
-        counts[key+1] += 1
-    end
-    position = 0
-    for i in eachindex(counts)
-        c = counts[i]
-        counts[i] = position
-        position += c
-    end
-    out = Vector{Int}(undef, length(ranked))
-    for (key, d) in ranked
-        p = counts[key+1] + 1
-        out[p] = d
-        counts[key+1] = p
-    end
-    return out
+    return parent, size
 end
 
-function _candidate_cycles(
-    h::DartGraph,
-    adj,
-    weights::Vector{Int},
-    levels::LevelStructure,
-    roots::Vector{Int},
-)
-    candidates = Vector{Vector{Int}}()
-    for d in _balanced_darts(adj, weights)
-        x = tail(h, d)
-        z = h.head[d]
-        roots[x] == 0 && continue
-        if roots[x] == roots[z]
-            push!(candidates, _tree_path(levels.parent, levels.depth, x, z))
+# --- the balanced cycle (Lemma 2) ----------------------------------------
+
+# Band vertices on the fundamental cycle of the balanced dual edge, that is on
+# the BFS tree path between the endpoints `p` and `q`.
+function _band_cycle(dg::DartGraph, tri::_Triangles, tree, band::BitVector, width::Int)
+    dual = _dual_tree(dg, tri, tree.parent_dart)
+    parent, size = _root_dual(dual, tri.ntri)
+    search =
+        _Search(tri, dual, band, width, parent, size, Int[], _Region(dg.n), _Region(dg.n))
+    e = _search_edge(search)
+    return _band_path(tree, band, dual.ep[e], dual.eq[e])
+end
+
+function _band_path(tree, band::BitVector, p::Int, q::Int)
+    path = Int[]
+    a, b = p, q
+    while a != b
+        if tree.depth[a] >= tree.depth[b]
+            band[a] && push!(path, a)
+            a = tree.parent[a]
         else
-            # The fundamental cycle passes through the shrunk levels, which are
-            # part of the separator already: keep only the two tree paths.
-            push!(
-                candidates,
-                vcat(
-                    _up_path(levels.parent, x, roots[x]),
-                    _up_path(levels.parent, z, roots[z]),
-                ),
-            )
+            band[b] && push!(path, b)
+            b = tree.parent[b]
         end
-        length(candidates) >= MAX_CYCLE_CANDIDATES && break
     end
-    return candidates
-end
-
-# Path from `v` up to its tree root `r`, both included.
-function _up_path(parent::Vector{Int}, v::Int, r::Int)
-    path = Int[v]
-    while path[end] != r
-        push!(path, parent[path[end]])
-    end
+    band[a] && push!(path, a)
     return path
 end
 
-# Tree path from x to z (both in the same tree), given parent pointers and
-# depths.
-function _tree_path(parent::Vector{Int}, depth::Vector{Int}, x::Int, z::Int)
-    left = Int[]
-    right = Int[]
-    a, b = x, z
-    while depth[a] > depth[b]
-        push!(left, a)
-        a = parent[a]
+# A dual edge is balanced when at most `2/3` of the band vertices lie strictly
+# on either side. Exactly one side can hold more than `2/3`, so every bad edge
+# points at its heavy side. Walk down the dual tree from the root along the
+# edges whose heavy side is below; at the end of the walk every incident bad
+# edge points at the current triangle, and then the three (at most) sides
+# cannot all be heavy, because a vertex is strictly inside at most `k - 1` of
+# `k` sides. So some child edge is balanced.
+#
+# Each step measures the children: the small ones from scratch, and the largest
+# one by removing the current triangle and the small subtrees from the region
+# it already holds. The work of a step is bounded by the size of the small
+# subtrees, which shrink the region by a constant factor or are removed from it,
+# so the whole walk is linear.
+function _search_edge(s::_Search)
+    _each_below!(_enter!, s.region, s, 1)
+    cur = 1
+    while true
+        e, next = _descend!(s, cur)
+        e != 0 && return e
+        next != 0 || error("no balanced dual edge: the embedding is not planar")
+        cur = next
     end
-    while depth[b] > depth[a]
-        push!(right, b)
-        b = parent[b]
-    end
-    while a != b
-        push!(left, a)
-        push!(right, b)
-        a = parent[a]
-        b = parent[b]
-    end
-    push!(left, a)
-    return vcat(left, reverse(right))
 end
 
-# --- final partition -----------------------------------------------------
-
-function _merge_vertices(base::Vector{Int}, extra::Vector{Int}, n::Integer)
-    return _sorted_ids(vcat(base, extra), n)
+function _kids(s::_Search, cur::Int)
+    kids = Tuple{Int,Int}[]
+    for i = 1:s.dual.cnt[cur]
+        w = s.dual.nbr[3*(cur-1)+i]
+        w == s.parent[cur] || push!(kids, (w, s.dual.eid[3*(cur-1)+i]))
+    end
+    return kids
 end
 
-# Components sorted by decreasing size, stable within a size. Counting over the
-# sizes is O(c + n); a comparison sort would be O(c log c).
-function _sort_components_by_size!(comps::Vector{Vector{Int}})
-    isempty(comps) && return comps
-    largest = maximum(length, comps)
-    counts = zeros(Int, largest + 1)
-    for comp in comps
-        counts[length(comp)+1] += 1
+_balanced(s::_Search, r::_Region) =
+    3 * r.full <= 2 * s.width && 3 * (s.width - r.touched) <= 2 * s.width
+
+_heavy(s::_Search, r::_Region) = 3 * r.full > 2 * s.width
+
+# Returns `(edge, 0)` when a child edge of `cur` is balanced, else `(0, next)`
+# with the region of `s` rebuilt for the child that holds the heavy side.
+function _descend!(s::_Search, cur::Int)
+    kids = _kids(s, cur)
+    isempty(kids) && error("no balanced dual edge: the embedding is not planar")
+    big = kids[argmax([s.size[c] for (c, _) in kids])]
+    next = 0
+    for (c, e) in kids
+        c == big[1] && continue
+        _reset!(s.scratch)
+        _each_below!(_enter!, s.scratch, s, c)
+        _balanced(s, s.scratch) && return (e, 0)
+        _heavy(s, s.scratch) && (next = c)
     end
-    position = 0
-    for size = largest:-1:0
-        c = counts[size+1]
-        counts[size+1] = position
-        position += c
-    end
-    ordered = Vector{Vector{Int}}(undef, length(comps))
-    for comp in comps
-        size = length(comp)
-        p = counts[size+1] + 1
-        ordered[p] = comp
-        counts[size+1] = p
-    end
-    copyto!(comps, ordered)
-    return comps
+    _peel!(s, cur, kids, big[1])
+    _balanced(s, s.region) && return (big[2], 0)
+    _heavy(s, s.region) && return (0, big[1])
+    next == 0 && return (0, 0)
+    _reset!(s.region)
+    _each_below!(_enter!, s.region, s, next)
+    return (0, next)
 end
 
-# Partition `vertices(g) \\ separator` into connected components, then put the
-# components into two bins of nearly equal size.
-function _split_and_pack(dg::DartGraph, separator::Vector{Int})
-    comps = components_without(dg, _mask(separator, dg.n))
-    _sort_components_by_size!(comps)
-    a = Int[]
-    b = Int[]
-    size_a = 0
-    size_b = 0
-    for comp in comps
-        if size_a <= size_b
-            append!(a, comp)
-            size_a += length(comp)
-        else
-            append!(b, comp)
-            size_b += length(comp)
+# Leave the region of `cur` with the subtree of its child `big` only.
+function _peel!(s::_Search, cur::Int, kids, big::Int)
+    _apply_triangle!(_leave!, s.region, s, cur)
+    for (c, _) in kids
+        c == big || _each_below!(_leave!, s.region, s, c)
+    end
+    return nothing
+end
+
+# --- packing the components and pruning the separator ---------------------
+
+# `side[v]`: 0 for the separator, 1 for `A`, 2 for `B`.
+function _partition(dg::DartGraph, separator::Vector{Int}, cap::Int)
+    comp, sizes = _components_without(dg, separator)
+    bins = _bins(sizes, dg.n)
+    side = Int8[c == 0 ? Int8(0) : bins[c] for c in comp]
+    _prune!(dg, side, cap)
+    max(count(==(1), side), count(==(2), side)) <= cap ||
+        error("internal error: the separator leaves a side above $cap vertices")
+    return side
+end
+
+# Component labels of the graph without `separator` (0 on the separator) and
+# the component sizes.
+function _components_without(dg::DartGraph, separator::Vector{Int})
+    comp = zeros(Int, dg.n)
+    for v in separator
+        comp[v] = -1
+    end
+    sizes = Int[]
+    stack = Int[]
+    for s = 1:dg.n
+        comp[s] == 0 || continue
+        push!(sizes, _flood!(comp, stack, dg, s, length(sizes) + 1))
+    end
+    for v in separator
+        comp[v] = 0
+    end
+    return comp, sizes
+end
+
+function _flood!(comp::Vector{Int}, stack::Vector{Int}, dg::DartGraph, s::Int, id::Int)
+    comp[s] = id
+    push!(stack, s)
+    size = 0
+    while !isempty(stack)
+        v = pop!(stack)
+        size += 1
+        for d in incident_darts(dg, v)
+            w = dg.head[d]
+            comp[w] == 0 || continue
+            comp[w] = id
+            push!(stack, w)
         end
     end
-    return _sorted_ids(a, dg.n), _sorted_ids(b, dg.n), _sorted_ids(separator, dg.n)
+    return size
 end
 
-_is_balanced(candidate, n::Integer, balance::Real) =
-    max(length(candidate[1]), length(candidate[2])) <= balance * n
-
-# --- disconnected case (Theorem 4, end of the proof) ---------------------
-
-function _separator_disconnected(
-    dg::DartGraph,
-    label::Vector{Int},
-    ncomps::Int,
-    balance::Real,
-)
-    n = dg.n
-    comps = [Int[] for _ = 1:ncomps]
-    for v = 1:n
-        push!(comps[label[v]], v)
+# Two bins, each of at most `2n/3` vertices, for components that are all at most
+# `2n/3`: a component of at least `n/3` goes alone into the first bin and the
+# rest into the second; otherwise components fill the first bin until it passes
+# `n/3`, which leaves it below `2n/3`, and the second bin has the rest.
+function _bins(sizes::Vector{Int}, n::Int)
+    bins = fill(Int8(2), length(sizes))
+    isempty(sizes) && return bins
+    big = argmax(sizes)
+    if 3 * sizes[big] >= n
+        bins[big] = 1
+        return bins
     end
-    _sort_components_by_size!(comps)
-    biggest = comps[1]
-    length(biggest) > balance * n && return _recurse_into_component(dg, comps, balance)
-    if length(biggest) >= n / 3
-        return (_sorted_ids(biggest, n), _sorted_ids(_flatten(comps[2:end]), n), Int[])
+    cum = 0
+    for c in eachindex(sizes)
+        bins[c] = 1
+        cum += sizes[c]
+        3 * cum > n && break
     end
-    return _pack_components(comps, n)
+    return bins
 end
 
-function _recurse_into_component(dg::DartGraph, comps, balance::Real)
-    sub, ids = induced(dg, _mask(comps[1], dg.n))
-    a, b, c = _best_connected(sub, balance)
-    n = dg.n
-    part_a = _sorted_ids(Int[ids[v] for v in a], n)
-    part_b = _sorted_ids(Int[ids[v] for v in b], n)
-    rest = _flatten(comps[2:end])
-    if length(part_a) >= length(part_b)
-        return (
-            part_a,
-            _sorted_ids(vcat(part_b, rest), n),
-            _sorted_ids(Int[ids[v] for v in c], n),
-        )
-    end
-    return (
-        part_b,
-        _sorted_ids(vcat(part_a, rest), n),
-        _sorted_ids(Int[ids[v] for v in c], n),
-    )
-end
-
-function _pack_components(comps, n::Integer)
-    threshold = n / 3
-    cut = length(comps)
-    cumulative = 0
-    for (i, comp) in enumerate(comps)
-        cumulative += length(comp)
-        if cumulative > threshold
-            cut = i
-            break
+# A separator vertex with no neighbour in one side can join the other side,
+# while that side stays within `cap`. One pass reaches a fixed point, because a
+# vertex that joins a side can only block, never free, the others.
+function _prune!(dg::DartGraph, side::Vector{Int8}, cap::Int)
+    sa = count(==(1), side)
+    sb = count(==(2), side)
+    for v = 1:dg.n
+        side[v] == 0 || continue
+        has_a, has_b = _neighbor_sides(dg, side, v)
+        can_a = !has_b && sa < cap
+        can_b = !has_a && sb < cap
+        if can_a && (!can_b || sa <= sb)
+            side[v] = 1
+            sa += 1
+        elseif can_b
+            side[v] = 2
+            sb += 1
         end
     end
-    return (
-        _sorted_ids(_flatten(comps[1:cut]), n),
-        _sorted_ids(_flatten(comps[(cut+1):end]), n),
-        Int[],
-    )
+    return side
 end
 
-function _flatten(comps)
-    out = Int[]
-    for comp in comps
-        append!(out, comp)
+function _neighbor_sides(dg::DartGraph, side::Vector{Int8}, v::Int)
+    has_a = false
+    has_b = false
+    for d in incident_darts(dg, v)
+        s = side[dg.head[d]]
+        has_a |= s == 1
+        has_b |= s == 2
     end
-    return out
+    return has_a, has_b
 end

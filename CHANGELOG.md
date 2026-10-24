@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `separator_partition(g, r)` and `SeparatorPartition`: the recursive separator
+  partition (a global separator plus parts of at most `r` vertices with no edge
+  between parts, `|S| = O(n/sqrt(r))`, `O(1 + n/r)` parts, `O(n (1 + log(n/r)))`
+  time, `O(n)` space), with optional induced part graphs.
+
+### Changed
+
+- `separator` is now the exact Lipton–Tarjan algorithm: every component left by
+  the separator has at most `2n/3` vertices and `|C| <= 2*sqrt(2n)`, for every
+  input, in `O(n)` worst-case time. The heuristic cycle candidates and the
+  refinement loop (which could be exponential in principle and gave no balance
+  guarantee) are gone. Faces with four or more sides get virtual star vertices,
+  so no triangulation of the input is needed and graphs with bridges and cut
+  vertices are handled; the balanced cycle is found by an exact walk down the
+  dual tree.
+- A pruning pass moves redundant separator vertices into `A` or `B`: paths give
+  one separator vertex, cycles two, and `k x k` grids `k - 1`.
+- Matching the twin darts of a rotation system (`PlanarGraph` to `DartGraph`,
+  `induced`) uses two counting sorts instead of a hash table: `O(n + m)` in the
+  worst case.
+- `separator` requires `balance` in `[2/3, 1)` (it used to accept `(0, 1)` and
+  silently return an unbalanced result below `2/3`), and rejects a rotation
+  system that is not a planar embedding with an `ArgumentError`.
+
 ## [0.2.1] - 2026-10-24
 
 ### Changed

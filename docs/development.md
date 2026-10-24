@@ -43,6 +43,7 @@ its generators.
 | `triangulate_test.jl` | chord insertion, maximal-planarity counts, rejection of non-2-connected and non-planar inputs |
 | `generators_test.jl` | vertex and edge counts, degrees, face counts, determinism under a seed |
 | `separator_test.jl` | validity, balance and size on structured, random, sparse and disconnected graphs, `balance` handling, determinism |
+| `separator_partition_test.jl` | the seven guarantees on structured, random, sparse, disconnected and isolated-vertex graphs, threshold extremes, determinism and immutability, the induced-graph option |
 | `planarity_test.jl` | `is_planar` and `planar_embedding` against `Graphs.is_planar` on random graphs and the classical obstructions, Euler's formula on the result, recomputation of broken rotations, edge and vertex preservation, linear scaling |
 | `drawing_test.jl` | integer coordinates inside the bounding box, distinct positions, no vertex on an edge, no crossing edges, the `2n-4 × (n-2)` bounds, components, trivial graphs, rejection of non-planar input |
 | `graph_io_test.jl` | round trips for embedded and bare graphs, the file format, isolated vertices and empty graphs, every rejected input |
