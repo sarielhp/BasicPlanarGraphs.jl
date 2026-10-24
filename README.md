@@ -3,9 +3,9 @@
 [![CI](https://github.com/sarielhp/BasicPlanarGraphs.jl/actions/workflows/ci.yml/badge.svg)](https://github.com/sarielhp/BasicPlanarGraphs.jl/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Planar graphs with an abstract embedding (a rotation system), and a linear-time
-planar separator based on Lipton and Tarjan, *A Separator Theorem for Planar
-Graphs* (SIAM J. Appl. Math. 36(2), 1979).
+Planar graphs with an abstract embedding (a rotation system): linear-time
+planarity testing and embedding, the Lipton–Tarjan planar separator, straight-line
+grid drawings, and a plain-text graph file format.
 
 ## Documentation
 
@@ -14,8 +14,11 @@ Full documentation lives in [`docs/`](docs/README.md):
 | Page | Contents |
 |---|---|
 | [Embedding](docs/embedding.md) | the `PlanarGraph` type, rotation systems, faces, duality, Euler's formula, the dart core |
+| [Planarity and embedding](docs/planarity.md) | `is_planar`, `planar_embedding`, the Left-Right test, what an embedding guarantees |
+| [Grid drawing](docs/drawing.md) | `grid_drawing`, `GridDrawing`, grid-size bounds, the Fraysseix–Pach–Pollack placement |
 | [Separator](docs/separator.md) | guarantees, the Lipton–Tarjan stages, refinement, disconnected inputs, complexity |
 | [Generators and triangulation](docs/generators.md) | `planar_path`, `planar_cycle`, `planar_grid`, `planar_wheel`, `random_triangulation`, `triangulate` |
+| [Graph files](docs/io.md) | the sectioned text format, the writers and readers, what is rejected |
 | [API reference](docs/api.md) | every exported name with signatures, return types, and errors |
 | [Development](docs/development.md) | build, the quality gate, the test suite, CI |
 
@@ -67,6 +70,22 @@ of the vertices, no edge between `A` and `B`, `|A|, |B| <= balance * n`, and
 `|C| = O(sqrt(n))` — at most `2*sqrt(2n) + 1` on the test families. Running time is
 linear in `n + m`, with a small constant. The stages, the guarantees and the
 caveats: [Separator](docs/separator.md).
+
+Planarity is decided by the Left-Right test, `is_planar`, in linear time, and
+`planar_embedding` turns the partition of the return edges into a rotation
+system — or recomputes one for a stored rotation that is not an embedding:
+
+```julia
+is_planar(complete_graph(5))                       # false
+e = planar_embedding(smallgraph(:dodecahedral))    # 20 vertices, 12 faces
+```
+
+`grid_drawing` draws an embedding in straight lines on an integer grid of area
+`O(n) × O(n)` — at most `2(n-2)` wide and `n-2` high for a connected graph — and
+`write_planar_graph`/`read_planar_graph` (or `write_graph`/`read_graph` for a
+bare `SimpleGraph`) store it as text. Details:
+[Planarity and embedding](docs/planarity.md), [Grid drawing](docs/drawing.md),
+[Graph files](docs/io.md).
 
 Generators, triangulation, and the full export list:
 [Generators](docs/generators.md) and [API reference](docs/api.md).

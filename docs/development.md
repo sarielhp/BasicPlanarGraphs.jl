@@ -42,6 +42,9 @@ its generators.
 | `triangulate_test.jl` | chord insertion, maximal-planarity counts, rejection of non-2-connected and non-planar inputs |
 | `generators_test.jl` | vertex and edge counts, degrees, face counts, determinism under a seed |
 | `separator_test.jl` | validity, balance and size on structured, random, sparse and disconnected graphs, `balance` handling, determinism |
+| `planarity_test.jl` | `is_planar` and `planar_embedding` against `Graphs.is_planar` on random graphs and the classical obstructions, Euler's formula on the result, recomputation of broken rotations, edge and vertex preservation, linear scaling |
+| `drawing_test.jl` | integer coordinates inside the bounding box, distinct positions, no vertex on an edge, no crossing edges, the `2n-4 × (n-2)` bounds, components, trivial graphs, rejection of non-planar input |
+| `graph_io_test.jl` | round trips for embedded and bare graphs, the file format, isolated vertices and empty graphs, every rejected input |
 | `scaling_test.jl` | quadrupling `n` does not blow up the running time (generous factor for loaded machines) |
 
 Two properties make the separator tests meaningful rather than circular:

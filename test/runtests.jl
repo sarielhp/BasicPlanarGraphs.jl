@@ -10,6 +10,9 @@ using Test
     include("generators_test.jl")
     include("separator_test.jl")
     include("scaling_test.jl")
+    include("graph_io_test.jl")
+    include("planarity_test.jl")
+    include("drawing_test.jl")
 
     @testset "Aqua" begin
         Aqua.test_all(BasicPlanarGraphs)

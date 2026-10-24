@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `is_planar`: the Left-Right planarity test of Brandes, imported from `Graphs.jl`
+  and re-exported, so it is one function whichever package is loaded. Linear in
+  `nv + ne`; for a `PlanarGraph` it asks about the graph, not the rotation.
+- `planar_embedding`: computes a rotation system for a planar graph in linear
+  time, or returns `nothing` when there is none. The result satisfies Euler's
+  formula on every component, so it feeds `separator`, `triangulate` and
+  `grid_drawing`; a `PlanarGraph` whose stored rotation is not an embedding gets
+  a recomputed one, and a valid one is returned unchanged.
+- `grid_drawing`, with the `GridDrawing` type and the queries `coordinates`,
+  `width` and `height`: a straight-line crossing-free drawing with integer
+  coordinates, computed in linear time by the Fraysseix–Pach–Pollack placement
+  after augmenting the embedding to a triangulation. A connected graph with
+  `n >= 3` fits in `2(n-2) × (n-2)`; disconnected graphs are drawn component by
+  component and packed.
+- Graph files: `write_planar_graph`, `read_planar_graph`, `write_graph` and
+  `read_graph`, a sectioned plain-text format with an optional `vertices`
+  directive, an `edges` section and a `rotation` section. Reading validates the
+  syntax, rejects duplicate and self-loop edges, requires the two sections to
+  describe the same graph, and reports errors as `source:line: message`.
+- Documentation: new pages on planarity and embedding, grid drawing, and graph
+  files; the API reference and the README cover the new names.
+
+### Changed
+
+- `Graphs` compatibility raised to `1.15`, the first release with
+  `Graphs.is_planar`.
+
 ## [0.1.0] - 2026-10-24
 
 First release.
