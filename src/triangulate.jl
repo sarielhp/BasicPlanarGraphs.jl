@@ -78,13 +78,32 @@ function _verify_triangulation(h::DartGraph)
     return nothing
 end
 
+# Steps to try for a chord, the most balanced first. A chord at `step` leaves a
+# face of length `step + 1` on one side, so `step` near `k/2` halves the face.
+# Splitting off one vertex at a time would copy the whole orbit at every step,
+# which is quadratic on a face with many vertices.
+function _chord_steps(k::Int)
+    half = k ÷ 2
+    steps = Int[]
+    for d = 0:half
+        low = half - d
+        2 <= low <= k - 2 && push!(steps, low)
+        d == 0 && continue
+        high = half + d
+        2 <= high <= k - 2 && push!(steps, high)
+    end
+    return steps
+end
+
 # First chord that splits the face `orbit` into two proper faces.
 function _find_chord(orbit::Vector{Int}, h::DartGraph, adjacency)
     k = length(orbit)
+    k >= 4 || return nothing
+    steps = _chord_steps(k)
     for i = 1:k
-        for step = 2:(k-2)
+        vi = tail(h, orbit[i])
+        for step in steps
             j = mod1(i + step, k)
-            vi = tail(h, orbit[i])
             vj = tail(h, orbit[j])
             vi == vj && continue
             vj in adjacency[vi] && continue

@@ -63,6 +63,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   allocated memory. `tools/gate` runs it offline on a small local graph, so a
   broken example fails the gate.
 
+### Fixed
+
+- `triangulate` now tries the most balanced chord of a face first instead of the
+  chord that peels off the fewest vertices. Both choices give a valid
+  triangulation, but the old one copied the whole face boundary once per chord:
+  quadratic copying, 5.5 s and 18.7 GiB of allocation for a 50,000-vertex cycle.
+  The balanced split copies `O(n log n)` instead: about 0.2 s and 265 MiB for
+  the same input. This also speeds up `cycle_separator` and `grid_drawing` on
+  graphs with large faces.
+
 ### Changed
 
 - `Graphs` compatibility raised to `1.15`, the first release with
