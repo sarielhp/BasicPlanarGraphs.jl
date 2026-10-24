@@ -34,3 +34,7 @@ Thumbs.db
 reviews/archive/
 reviews/logs/
 .bws/
+# Review cycle artifacts
+.bws/.write.lock
+.bws/config.jsonc.bak
+.bws/tmp/
