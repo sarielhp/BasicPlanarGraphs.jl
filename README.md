@@ -44,6 +44,7 @@ Full documentation lives in [`docs/`](docs/README.md):
 | [Planarity and embedding](docs/planarity.md) | `is_planar_linear`, `planar_embedding`, the Left-Right test, what an embedding guarantees |
 | [Grid drawing](docs/drawing.md) | `grid_drawing`, `GridDrawing`, grid-size bounds, the Fraysseix–Pach–Pollack placement |
 | [Separator](docs/separator.md) | guarantees, the Lipton–Tarjan stages, refinement, disconnected inputs, complexity |
+| [Cycle separator](docs/cycle_separator.md) | guarantees, the left/right convention, the Har-Peled–Nayyeri phases, shortcutting chords |
 | [Generators and triangulation](docs/generators.md) | `planar_path`, `planar_cycle`, `planar_grid`, `planar_wheel`, `random_triangulation`, `triangulate` |
 | [Graph files](docs/io.md) | the sectioned text format, the writers and readers, what is rejected |
 | [API reference](docs/api.md) | every exported name with signatures, return types, and errors |
@@ -98,6 +99,25 @@ of the vertices, no edge between `A` and `B`, `|A|, |B| <= balance * n`, and
 linear in `n + m`, with a small constant. The stages, the guarantees and the
 caveats: [Separator](docs/separator.md).
 
+`cycle_separator(g)` returns a balanced separator that is a genuine **simple
+cycle of `g`** rather than a vertex set — consecutive vertices, including the
+last and the first, are adjacent, and no vertex repeats. `cycle_sides(g, C)`
+returns the vertices on the two sides; rotations are counter-clockwise, so the
+left of the traversal is the inside, and the cycle is oriented with the smaller
+side inside. Both sides hold at most `2/3` of the vertices, and the separator
+phases and the shortcut are linear in the size of the internal triangulation
+(following Har-Peled and Nayyeri). The internal triangulation is
+shortcut back to edges of `g`, so the result is a cycle of the graph you passed
+in, not of its triangulation. Details, including the shortcut (which is not in
+the paper or in OGDF): [Cycle separator](docs/cycle_separator.md).
+
+```julia
+g = planar_grid(20, 20)
+C = cycle_separator(g)
+inside, outside = cycle_sides(g, C)
+maximum([length(inside), length(outside)]) <= 2 / 3 * nv(g)
+```
+
 Planarity is decided by the Left-Right test, `is_planar_linear`, in linear time
 on an explicit stack (a road network with a million intersections is fine), and
 `planar_embedding` turns the partition of the return edges into a rotation
@@ -141,6 +161,7 @@ corresponding `src/` file names it.
 | Planarity testing and embedding (`src/planarity.jl`) | U. Brandes, *The Left-Right Planarity Test* (2009) | [NetworkX](https://networkx.org) `algorithms/planarity.py`: the iterative formulation of the two DFS passes, the nesting-depth rules and the conflict-stack operations | BSD-3-Clause |
 | Straight-line grid drawing (`src/grid_drawing.jl`) | H. de Fraysseix, J. Pach, R. Pollack, *How to draw a planar graph on a grid* (Combinatorica 10, 1990) | [OGDF](https://ogdf.github.io) `src/ogdf/planarlayout/FPPLayout.cpp`: the shelling order over a candidate list, the level-by-level placement and the x-offset pass | GPL-2.0 or GPL-3.0 |
 | Planar separator (`src/separator.jl`) | R. J. Lipton, R. E. Tarjan, *A Separator Theorem for Planar Graphs* (SIAM J. Appl. Math. 36(2), 1979) | — | — |
+| Cycle separator (`src/cycle_separator.jl`, `src/cycle_shortcut.jl`) | S. Har-Peled, A. Nayyeri, *A Simple Algorithm for Computing a Cycle Separator* (Comput. Geom. 83, 2019) | [OGDF](https://ogdf.github.io) `src/ogdf/separator/SeparatorHarPeled.cpp`: the dual-tree fundamental cycle, the face levels, the nested level cycles and the ladder | GPL-2.0 or GPL-3.0 |
 | `is_planar` (re-exported) | same criterion as above | [Graphs.jl](https://github.com/JuliaGraphs/Graphs.jl) `src/planarity.jl` | BSD-2-Clause |
 
 No source file was copied: the Julia code is an independent implementation, and

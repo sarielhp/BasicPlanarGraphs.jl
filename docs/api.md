@@ -127,6 +127,29 @@ Vertex separator `C` with sides `A` and `B`:
 `balance` must be in `(0, 1)`; otherwise `ArgumentError`. Deterministic for a
 given graph. See [Separator](separator.md).
 
+## Cycle separator
+
+### `cycle_separator(g) -> Vector{Int}`
+
+A balanced cycle separator of a connected, 2-connected `PlanarGraph` with at
+least three vertices: a simple cycle of `g` (consecutive vertices, including the
+last and the first, are adjacent; no repeats) whose two sides each hold at most
+`2/3` of the vertices. The vector is oriented so that the left — the `inside`
+reported by `cycle_sides` — is the smaller side. `O(nv + ne)` time, following
+Har-Peled–Nayyeri; the cycle is short in the internal triangulation and on
+already-triangulated graphs in `g` itself. `ArgumentError` for a disconnected
+graph, a graph with fewer than three vertices, or one with a bridge or cut
+vertex. Deterministic. See [Cycle separator](cycle_separator.md).
+
+### `cycle_sides(g, cycle) -> (inside, outside)`
+
+The two sides of the simple cycle `cycle` in the connected `PlanarGraph` `g`.
+Rotations are counter-clockwise, so the vertices to the left of the traversal are
+`inside` and those to the right are `outside`; reversing `cycle` swaps them.
+Cycle vertices are in neither result, and both vectors are sorted. `ArgumentError`
+when `cycle` is not a simple cycle of `g` (too short, repeated vertex, vertex out
+of range, or two consecutive vertices not adjacent) or when `g` is disconnected.
+
 ## Drawing
 
 ### `grid_drawing(g) -> GridDrawing`
@@ -240,6 +263,8 @@ messages (default `<io>`); errors are `ArgumentError` with the form
 | `dual` | operation | `PlanarGraph` |
 | `triangulate` | operation | `PlanarGraph` |
 | `separator` | algorithm | `Tuple{Vector,Vector,Vector}` |
+| `cycle_separator` | algorithm | `Vector` |
+| `cycle_sides` | query | `Tuple{Vector,Vector}` |
 | `planar_path`, `planar_cycle`, `planar_grid`, `planar_wheel`, `random_triangulation` | generators | `PlanarGraph` |
 | `write_planar_graph`, `write_graph` | file output | `IO` or `nothing` |
 | `read_planar_graph`, `read_graph` | file input | `PlanarGraph` / `SimpleGraph` |

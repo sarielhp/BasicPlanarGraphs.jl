@@ -22,7 +22,10 @@ end
 
 triangulate(g::PlanarGraph) = PlanarGraph(triangulate(DartGraph(g)))
 
-function _add_chords!(h::DartGraph)
+# `region` optionally records, for every dart, the face of the original graph
+# the dart's face lies in. It is used by the cycle separator to map a cycle of
+# the triangulation back to the input.
+function _add_chords!(h::DartGraph, region::Union{Nothing,Vector{Int}} = nothing)
     orbits, _ = face_orbits(h)
     stack = orbits
     adjacency = [Set{Int}() for _ = 1:h.n]
@@ -35,10 +38,33 @@ function _add_chords!(h::DartGraph)
         chord = _find_chord(orbit, h, adjacency)
         chord === nothing && continue
         faces_added = _insert_chord!(h, orbit, chord[1], chord[2], adjacency)
+        if region !== nothing
+            # The two darts of the new chord lie in the same region as the
+            # face that was split; `add_dart!` appended them in this order.
+            r = region[orbit[1]]
+            push!(region, r)
+            push!(region, r)
+        end
         push!(stack, faces_added[1])
         push!(stack, faces_added[2])
     end
     return h
+end
+
+# Triangulate `g` and report, for every dart of the result, the face of `g`
+# whose interior contains the dart's face.
+function _triangulate_with_regions(g::DartGraph)
+    h = copy(g)
+    orbits, _ = face_orbits(h)
+    region = zeros(Int, ndarts(h))
+    for (f, orbit) in enumerate(orbits)
+        for d in orbit
+            region[d] = f
+        end
+    end
+    _add_chords!(h, region)
+    _verify_triangulation(h)
+    return h, region
 end
 
 # Chord insertion is only sound for faces that are simple cycles; make sure the

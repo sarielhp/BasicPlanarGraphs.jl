@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `cycle_separator`: a balanced separator that is a **simple cycle of the input
+  graph**, computed by the algorithm of Har-Peled and Nayyeri; its phases and the
+  shortcut are linear in the size of the internal triangulation. The chords
+  added by the triangulation are shortcut back to boundary
+  arcs of the faces of the input — a step performed neither by the paper nor by
+  OGDF's `SeparatorHarPeled`, which returns only a vertex set — so consecutive
+  vertices of the result, including the last and the first, are adjacent in the
+  graph that was passed in. Both sides hold at most `2/3` of the vertices, and
+  the cycle is oriented with the smaller side on its left.
+- `cycle_sides(g, cycle)`: the two sides of any simple cycle of a connected
+  `PlanarGraph`. Because rotations are counter-clockwise, the vertices to the
+  left of the traversal are the inside and those to the right the outside;
+  reversing the cycle swaps the two. The cycle itself is in neither side, and
+  both are sorted.
 - `is_planar`: the Left-Right planarity test of Brandes, imported from `Graphs.jl`
   and re-exported, so it is one function whichever package is loaded. For a
   `PlanarGraph` it asks about the graph, not the rotation. Note that the `Graphs.jl`
