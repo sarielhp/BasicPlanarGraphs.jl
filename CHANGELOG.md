@@ -65,13 +65,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `triangulate` now tries the most balanced chord of a face first instead of the
-  chord that peels off the fewest vertices. Both choices give a valid
-  triangulation, but the old one copied the whole face boundary once per chord:
-  quadratic copying, 5.5 s and 18.7 GiB of allocation for a 50,000-vertex cycle.
-  The balanced split copies `O(n log n)` instead: about 0.2 s and 265 MiB for
-  the same input. This also speeds up `cycle_separator` and `grid_drawing` on
-  graphs with large faces.
+- `triangulate` now triangulates each simple face with a single fan: it finds a
+  vertex whose every fan chord is still free and inserts all `k - 3` chords at
+  once, instead of splitting the face one chord at a time. This removes the
+  repeated copying of the face boundary that made the original implementation
+  quadratic (5.5 s and 18.7 GiB of allocation for a 50,000-vertex cycle). The
+  chord insertion is 2-4x faster than the balanced split it replaces (57 ms to
+  25 ms for that cycle), so `triangulate` takes about 0.09 s and
+  `cycle_separator` drops from 5.6 s to about 0.11 s on the same input. Faces
+  that are not simple cycles keep the one-chord-at-a-time path.
 
 ### Changed
 

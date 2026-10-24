@@ -27,13 +27,21 @@ triangulate(g::PlanarGraph) = PlanarGraph(triangulate(DartGraph(g)))
 # the triangulation back to the input.
 function _add_chords!(h::DartGraph, region::Union{Nothing,Vector{Int}} = nothing)
     orbits, _ = face_orbits(h)
-    stack = orbits
     adjacency = [Set{Int}() for _ = 1:h.n]
     for d = 1:ndarts(h)
         push!(adjacency[tail(h, d)], h.head[d])
     end
-    while !isempty(stack)
-        orbit = pop!(stack)
+    # Every simple face is triangulated in one pass: its whole fan of chords is
+    # computed from the original boundary and inserted directly. Faces that are
+    # not simple cycles keep the old one-chord-at-a-time path.
+    pending = Vector{Vector{Int}}()
+    for orbit in orbits
+        length(orbit) <= 3 && continue
+        _fan_triangulate!(h, orbit, adjacency, region) && continue
+        push!(pending, orbit)
+    end
+    while !isempty(pending)
+        orbit = pop!(pending)
         length(orbit) <= 3 && continue
         chord = _find_chord(orbit, h, adjacency)
         chord === nothing && continue
@@ -45,10 +53,87 @@ function _add_chords!(h::DartGraph, region::Union{Nothing,Vector{Int}} = nothing
             push!(region, r)
             push!(region, r)
         end
-        push!(stack, faces_added[1])
-        push!(stack, faces_added[2])
+        push!(pending, faces_added[1])
+        push!(pending, faces_added[2])
     end
     return h
+end
+
+# True when the vertices of the face walk `orbit` are pairwise distinct, i.e.
+# the face is a simple cycle. Small faces (the common case in a grid) are
+# checked without allocating; `allunique` otherwise.
+function _is_simple_face(h::DartGraph, orbit::Vector{Int})
+    k = length(orbit)
+    if k <= 8
+        for a = 1:(k-1), b = (a+1):k
+            tail(h, orbit[a]) == tail(h, orbit[b]) && return false
+        end
+        return true
+    end
+    return allunique(tail(h, orbit[t]) for t = 1:k)
+end
+
+# Triangulate a simple face by a fan from one of its vertices, inserting all
+# `k - 3` chords at once. Only an apex whose every fan chord is still free can
+# be used: a fan chord that already exists would duplicate an edge. Return
+# `false` without touching `h` when no such apex exists, so the caller can fall
+# back to the chord-at-a-time path.
+function _fan_triangulate!(
+    h::DartGraph,
+    orbit::Vector{Int},
+    adjacency,
+    region::Union{Nothing,Vector{Int}},
+)
+    k = length(orbit)
+    _is_simple_face(h, orbit) || return false
+    for s = 1:k
+        apex = tail(h, orbit[s])
+        free = true
+        for t = 2:(k-2)
+            if tail(h, orbit[mod1(s + t, k)]) in adjacency[apex]
+                free = false
+                break
+            end
+        end
+        free || continue
+        _add_fan!(h, orbit, s, region)
+        for t = 2:(k-2)
+            u = tail(h, orbit[mod1(s + t, k)])
+            push!(adjacency[apex], u)
+            push!(adjacency[u], apex)
+        end
+        return true
+    end
+    return false
+end
+
+# Insert the fan from `tail(orbit[s])` into the face `orbit`. Every non-apex
+# vertex receives exactly one chord, so a single anchor per vertex is enough; at
+# the apex the new darts are chained in boundary order.
+function _add_fan!(
+    h::DartGraph,
+    orbit::Vector{Int},
+    s::Int,
+    region::Union{Nothing,Vector{Int}},
+)
+    k = length(orbit)
+    apex = tail(h, orbit[s])
+    anchor = orbit[s]
+    r = region === nothing ? 0 : region[orbit[1]]
+    for t = 2:(k-2)
+        pos = mod1(s + t, k)
+        u = tail(h, orbit[pos])
+        forward = add_dart!(h, apex, u, anchor)
+        backward = add_dart!(h, u, apex, orbit[pos])
+        h.twin[forward] = backward
+        h.twin[backward] = forward
+        anchor = forward
+        if region !== nothing
+            push!(region, r)
+            push!(region, r)
+        end
+    end
+    return nothing
 end
 
 # Triangulate `g` and report, for every dart of the result, the face of `g`
