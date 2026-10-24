@@ -107,7 +107,7 @@ macOS (aarch64) and Windows (x64).
 
 Pushing does not block on CI. `tools/push` pushes and prints the run URL;
 `tools/check_ci` reports the verdict later (exit `0` green, `1` failed,
-`2` still running, `3` no run):
+`2` still running or not registered yet, `3` unknown):
 
 ```bash
 tools/push            # push, do not wait

@@ -6,9 +6,10 @@
 # One shot by design: this script never blocks waiting for CI unless you ask for it
 # with --wait. Push, then run this later (see AGENTS.md: pushes do not wait on CI).
 #
-#   tools/check_ci                 # latest run on the current branch
+#   tools/check_ci                 # did CI pass for HEAD?
 #   tools/check_ci --jobs          # .. plus a per-job verdict
-#   tools/check_ci --commit HEAD   # latest run for the current commit
+#   tools/check_ci --commit REV    # .. for another commit
+#   tools/check_ci --any           # newest run on the branch, whatever commit
 #   tools/check_ci --all           # a short table of recent runs
 #   tools/check_ci --wait          # opt-in: poll until the run finishes
 #   tools/check_ci --json | jq .   # machine-readable
@@ -16,8 +17,8 @@
 # Exit status (the point of the tool; safe to use in scripts and agents):
 #   0  the run completed and succeeded
 #   1  the run completed and did not succeed (failure, cancelled, timed out, ...)
-#   2  the run has not finished yet (queued / in progress); check again later
-#   3  no matching run, or the check itself could not be performed
+#   2  not finished, or no run registered for that commit yet; check again later
+#   3  the check itself could not be performed (bad revision, gh failure)
 #
 # Requires the GitHub CLI (`gh`), authenticated, and a git checkout with a remote.
 
@@ -141,6 +142,7 @@ end
 options = {
   branch: nil,
   commit: nil,
+  any: false,
   workflow: nil,
   limit: 20,
   jobs: false,
@@ -160,7 +162,8 @@ parser = OptionParser.new do |o|
   o.separator ""
   o.separator "Selection:"
   o.on("-b", "--branch BRANCH", "Branch to inspect (default: current branch)") { |v| options[:branch] = v }
-  o.on("-c", "--commit REV", "Only runs for this commit (default: latest run on the branch)") { |v| options[:commit] = v }
+  o.on("-c", "--commit REV", "Only runs for this commit (default: HEAD)") { |v| options[:commit] = v }
+  o.on("--any", "Ignore the commit: report the newest run on the branch") { options[:any] = true }
   o.on("-w", "--workflow NAME", "Only runs of this workflow") { |v| options[:workflow] = v }
   o.on("-n", "--limit N", Integer, "How many recent runs to scan (default: 20)") { |v| options[:limit] = v }
   o.on("-R", "--repo OWNER/REPO", "Repository (default: the one gh infers from the checkout)") { |v| options[:repo] = v }
@@ -192,7 +195,14 @@ die("unexpected arguments: #{ARGV.join(" ")}", EXIT_UNKNOWN) unless ARGV.empty?
 options[:branch] ||= git("rev-parse", "--abbrev-ref", "HEAD") unless options[:commit]
 die("not a git repository, or detached HEAD: pass --branch or --commit", EXIT_UNKNOWN) if options[:branch].nil? && options[:commit].nil?
 
-commit = options[:commit] ? resolve_commit(options[:commit]) : nil
+# By default the question is "did CI pass for what I have now?", so the answer is
+# about HEAD. --any relaxes it to the newest run on the branch.
+commit = if options[:commit] then resolve_commit(options[:commit])
+         elsif options[:any] then nil
+         else head_sha
+         end
+die("cannot determine HEAD; pass --commit or --any", EXIT_UNKNOWN) if commit.nil? && !options[:any] && options[:commit].nil?
+
 deadline = Time.now + options[:timeout]
 
 loop do
@@ -201,8 +211,8 @@ loop do
   runs = runs.select { |r| r["headSha"] == commit } if commit
 
   if runs.empty?
-    die("no workflow runs found#{commit ? " for #{short(commit)}" : ""}" \
-        "#{options[:workflow] ? " (workflow #{options[:workflow]})" : ""}", EXIT_UNKNOWN)
+    die("no workflow run for #{short(commit)} yet - it may not be registered; check again" \
+        "#{options[:workflow] ? " (workflow #{options[:workflow]})" : ""}", EXIT_PENDING)
   end
 
   if options[:all]
@@ -214,8 +224,8 @@ loop do
       payload = options[:jobs] ? latest.merge("jobs" => fetch_jobs(latest["databaseId"], repo: options[:repo])) : latest
       puts JSON.pretty_generate(payload)
     elsif options[:quiet]
-      puts "#{latest["conclusion"] || latest["status"]} #{latest["workflowName"]} " \
-           "#{short(latest["headSha"])} #{latest["url"]}"
+      state = [latest["conclusion"], latest["status"]].find { |v| !v.to_s.empty? } || "unknown"
+      puts "#{state} #{latest["workflowName"]} #{short(latest["headSha"])} #{latest["url"]}"
     else
       describe(latest, jobs: options[:jobs], repo: options[:repo])
       warn_ahead(latest)

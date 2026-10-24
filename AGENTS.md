@@ -31,10 +31,12 @@ command and returning; the verdict is a separate, later question.
 
 - Never `gh run watch`, never poll a run in a loop, and never sleep or wait inside a task
   for CI to finish. Report that a run was triggered and move on.
-- The one place that inspects results is `tools/check_ci` (Ruby, one shot). Exit status
-  carries the verdict: `0` success, `1` failed/cancelled, `2` still running, `3` no run or
-  unknown. `--jobs` adds a per-job verdict, `--commit REV` pins a commit, `--wait` is an
-  explicit opt-in and is not used in normal flow.
+- The one place that inspects results is `tools/check_ci` (Ruby, one shot). It asks about
+  HEAD by default (`--commit REV` for another commit, `--any` for the newest run on the
+  branch), and its exit status carries the verdict: `0` success, `1` failed/cancelled,
+  `2` still running or no run registered yet, `3` the check could not be performed.
+  `--jobs` adds a per-job verdict; `--wait` is an explicit opt-in and is not used in
+  normal flow.
 - `tools/push` pushes the current branch and prints the run URL without waiting.
 - Any other tool in `tools/` that touches CI follows the same rule: trigger remotely,
   print the URL, leave the verdict to `tools/check_ci`.
