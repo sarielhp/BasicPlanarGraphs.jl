@@ -1,0 +1,111 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# tools/gate — the project's fast quality gate.
+#
+# Contract (~/prog/standards/workflow/README.md): required analyzers, the test
+# suite, and exactly one build, in that order. Missing tools and failed checks
+# exit nonzero. Nothing is installed and nothing is committed.
+#
+# The steps are the Julia standard's package gate
+# (~/prog/standards/julia/GUIDELINES.md §8):
+#
+#   audit            julia-audit --strict --include-tests
+#   static analysis  julia-static-analysis  (syntax, formatting, JET, imports)
+#   tests            Pkg.test()             (includes Aqua.test_all)
+#   build            tools/build            (once, after the checks pass)
+#
+#   tools/gate             # the fast gate
+#   tools/gate --full      # plus a standalone Aqua run
+#   tools/gate --no-build  # skip the build step (not for release checks)
+#
+# Exit status: 0 everything passed; 1 a check failed; 3 a required tool is
+# missing or the invocation is wrong.
+
+require "optparse"
+
+PROJECT = File.expand_path("..", __dir__)
+JULIA = ENV.fetch("JULIA", "julia")
+
+def executable?(name)
+  return File.executable?(name) if name.include?(File::SEPARATOR)
+
+  ENV.fetch("PATH", "").split(File::PATH_SEPARATOR).any? do |dir|
+    next false if dir.empty?
+
+    path = File.join(dir, name)
+    File.file?(path) && File.executable?(path)
+  end
+end
+
+def julia(*code) = [JULIA, "--project=#{PROJECT}", "--startup-file=no", "-e", code.join("; ")]
+
+def steps(full:, build:)
+  list = [
+    ["audit", ["julia-audit", "--strict", "--include-tests"], "julia-audit"],
+    ["static analysis", ["julia-static-analysis"], "julia-static-analysis"],
+    ["tests", julia("using Pkg", "Pkg.test()"), nil],
+  ]
+  list << ["aqua", ["julia-static-analysis", "--aqua"], "julia-static-analysis"] if full
+  list << ["build", [File.join(__dir__, "build")], "tools/build"] if build
+  list
+end
+
+def check_tools(list)
+  missing = list.map(&:last).compact.reject { |tool| executable?(tool) }.uniq
+  return true if missing.empty?
+
+  warn "gate: missing required tools: #{missing.join(", ")}"
+  warn "gate: install them from ~/prog/standards/julia/bin (see julia-install-tools)"
+  false
+end
+
+def run_step(label, cmd)
+  puts "gate: #{label}"
+  started = Time.now
+  ok = system(*cmd, chdir: PROJECT)
+  elapsed = (Time.now - started).round(1)
+  return true if ok
+
+  warn "gate: #{label} FAILED (#{elapsed}s)"
+  false
+end
+
+full = false
+do_build = true
+parser = OptionParser.new do |o|
+  o.banner = "usage: tools/gate [--full] [--no-build]"
+  o.separator ""
+  o.separator "Audit, static analysis, tests, and one build."
+  o.separator ""
+  o.on("--full", "Also run the standalone Aqua checks") { full = true }
+  o.on("--no-build", "Skip the build step") { do_build = false }
+  o.on("-h", "--help", "Show this help") do
+    puts o
+    exit 0
+  end
+end
+
+begin
+  parser.parse!(ARGV)
+rescue OptionParser::ParseError => e
+  warn "gate: #{e.message}\n#{parser}"
+  exit 3
+end
+
+unless ARGV.empty?
+  warn "gate: unexpected arguments: #{ARGV.join(" ")}"
+  exit 3
+end
+
+exit 3 unless check_tools(steps(full: full, build: do_build))
+
+steps(full: full, build: do_build).each do |label, cmd, _tool|
+  next if run_step(label, cmd)
+
+  warn "gate: stopped at #{label}"
+  exit 1
+end
+
+puts "gate: all checks passed"
+exit 0

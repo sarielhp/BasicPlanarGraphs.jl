@@ -43,6 +43,51 @@ command and returning; the verdict is a separate, later question.
 - Surface a CI failure only when the task at hand depends on it, when the user asks for
   the verdict, or when a run was already known to be red.
 
+## Repository lifecycle
+
+The project follows the review-cycle contract in
+`~/prog/standards/workflow/README.md`; the settings live in `tools/review_cycle.json`
+(target `.`, gate and build, `push: false`). Every entry point is Ruby and self-documenting
+(`--help`); none installs anything or touches Git except where stated.
+
+| Command | Behavior |
+|---|---|
+| `tools/build` | Instantiate the environment and load the package. No tests, no linters, no installs. |
+| `tools/gate` | Fast gate: `julia-audit --strict --include-tests`, `julia-static-analysis`, `Pkg.test()` (with Aqua), then one `tools/build`. `--full` adds a standalone Aqua run; `--no-build` skips the build. |
+| `tools/check` | Compatibility alias for `tools/gate` (a symlink). |
+| `tools/push` | `git push` and return; reports the run URL, never waits. |
+| `tools/check_ci` | Verdict of the latest Actions run: exit `0` green, `1` failed, `2` pending, `3` unknown. |
+
+`tools/gate` is the entry point for "is this good"; `tools/build` for "does it load". A
+gate failure stops at the failing step and exits `1`; a missing tool exits `3`.
+
+## Autonomous review cycle (`review-cycle`)
+
+The engine and review-audit live in ~/prog/26/ruby/review_cycle and run from PATH. The
+repository contract is ~/prog/standards/workflow/README.md; project choices belong in
+tools/review_cycle.json. Read project/language guidelines, agent instructions, and tooling
+settings before remediation.
+
+| Command | Effect |
+|---|---|
+| `rtk proxy review-cycle --doctor` | Check host and configured sandbox prerequisites. |
+| `rtk proxy review-cycle --setup` | Requested onboarding: configure local bws profiles/tools and project review files. |
+| `rtk proxy review-cycle --no-push` | Requested audit/remediation with local commits, gate/build, and differential verification. |
+| `rtk proxy review-cycle --loop --no-push` | Bounded loop across lenses; default maximum seven cycles. |
+| `rtk proxy review-cycle --push` | Authorized upstream publication with remote SHA verification. |
+| `rtk proxy review-cycle --status` | Inspect rotation and history. |
+| `rtk proxy review-cycle --dry-run --no-push` | Audit/report without remediation or commits; writes reports/logs and runs pre-flight checks. |
+
+Commits remain local by default; inspect existing explicit push:true settings and use
+--no-push when needed. Review commits do not contain lifecycle structured verification or
+create release tags. Run `tools/gate` before authorized publication. Install only through
+the explicitly authorized project installation workflow.
+
+Command approval permits execution, not unrelated work. Reuse session authorization. Keep
+sandboxing and manual approval review enabled; never enlarge writable roots, modify
+approval rules, install dependencies, or publish merely because these instructions are
+present.
+
 ## Package notes
 
 - Public repository: <https://github.com/sarielhp/BasicPlanarGraphs.jl>, MIT licensed,

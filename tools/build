@@ -1,0 +1,94 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# tools/build — produce or validate the repository artifact.
+#
+# The review-cycle contract (~/prog/standards/workflow/README.md) requires every
+# repository to carry a build entry point that answers one question: does the
+# artifact exist and load? It runs no tests, no linters, installs nothing, and
+# never touches Git.
+#
+# For this pure-Julia package that means: resolve the environment, then load the
+# module, which precompiles every source file and fails on a syntax or include
+# error. `tools/gate` runs this once after its checks pass.
+#
+#   tools/build            # instantiate the project and load the package
+#   tools/build --quiet    # only report failures
+#
+# Exit status: 0 the package loads; 1 it does not; 3 Julia is unavailable.
+
+require "optparse"
+
+JULIA = ENV.fetch("JULIA", "julia")
+PROJECT = File.expand_path("..", __dir__)
+
+def julia_available?
+  ENV.fetch("PATH", "").split(File::PATH_SEPARATOR).any? do |dir|
+    next false if dir.empty?
+
+    path = File.join(dir, JULIA)
+    File.file?(path) && File.executable?(path)
+  end
+end
+
+def report(quiet, message)
+  puts message unless quiet
+end
+
+def run_step(quiet, label, code)
+  report(quiet, "build: #{label}")
+  started = Time.now
+  ok = system(JULIA, "--project=#{PROJECT}", "--startup-file=no", "-e", code)
+  elapsed = (Time.now - started).round(1)
+  return true if ok
+
+  warn "build: #{label} failed (#{elapsed}s)"
+  false
+end
+
+def failure_hint
+  warn "build: fix the load error above; run the tests with tools/gate"
+end
+
+quiet = false
+parser = OptionParser.new do |o|
+  o.banner = "usage: tools/build [--quiet]"
+  o.separator ""
+  o.separator "Instantiate the project environment and load BasicPlanarGraphs."
+  o.separator ""
+  o.on("-q", "--quiet", "Only report failures") { quiet = true }
+  o.on("-h", "--help", "Show this help") do
+    puts o
+    exit 0
+  end
+end
+
+begin
+  parser.parse!(ARGV)
+rescue OptionParser::ParseError => e
+  warn "build: #{e.message}\n#{parser}"
+  exit 3
+end
+
+warn "build: unexpected arguments: #{ARGV.join(" ")}" unless ARGV.empty?
+exit 3 unless ARGV.empty?
+
+unless julia_available?
+  warn "build: #{JULIA} not found on PATH (set JULIA to the executable)"
+  exit 3
+end
+
+steps = [
+  ["instantiate the project environment", "using Pkg; Pkg.instantiate()"],
+  ["load the package", "using BasicPlanarGraphs"],
+]
+
+steps.each do |label, code|
+  next if run_step(quiet, label, code)
+
+  failure_hint
+  exit 1
+end
+
+report(quiet, "build: ok")
+exit 0

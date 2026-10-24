@@ -1,0 +1,9 @@
+{
+  "target": ".",
+  "gate_cmd": "tools/gate",
+  "build_cmd": "tools/build",
+  "gate_includes_build": true,
+  "guidelines": "Follow project AGENTS.md and the Julia standards in ~/prog/standards/julia: nesting depth <= 4, cognitive complexity <= 15, methods <= 80 lines (up to 120 only when cognitive complexity <= 5), files <= 1100 lines, JuliaFormatter default style, explicit imports, typed struct fields, concrete containers. The gate is julia-audit --strict --include-tests, julia-static-analysis, Pkg.test() (which includes Aqua), and one build. Refactors must be behavior-preserving: numerical results on fixed inputs stay bit-identical, and a result change is its own deliberate commit.",
+  "max_diff_lines": 800,
+  "push": false
+}

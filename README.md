@@ -104,6 +104,12 @@ julia-static-analysis
 These commands and the audit tooling are described in [AGENTS.md](AGENTS.md).
 CI runs `Pkg.test()` on Linux x64 for Julia 1.10 and the latest release.
 
+```bash
+tools/build            # instantiate the environment and load the package
+tools/gate             # audit, static analysis, tests (with Aqua), build (~35 s)
+tools/gate --full      # .. plus a standalone Aqua run
+```
+
 Pushing does not block on CI. `tools/push` pushes and prints the run URL;
 `tools/check_ci` reports the verdict later (exit `0` green, `1` failed,
 `2` still running or not registered yet, `3` unknown):

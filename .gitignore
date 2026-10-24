@@ -29,3 +29,8 @@ Thumbs.db
 # Logs and profiles
 *.log
 *.prof
+
+# review-cycle artifacts
+reviews/archive/
+reviews/logs/
+.bws/
