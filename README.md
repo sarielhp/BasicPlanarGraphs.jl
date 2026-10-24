@@ -102,8 +102,7 @@ julia-static-analysis
 ```
 
 These commands and the audit tooling are described in [AGENTS.md](AGENTS.md).
-CI runs `Pkg.test()` on Julia 1.10 and the latest release for Linux (x64),
-macOS (aarch64) and Windows (x64).
+CI runs `Pkg.test()` on Linux x64 for Julia 1.10 and the latest release.
 
 Pushing does not block on CI. `tools/push` pushes and prints the run URL;
 `tools/check_ci` reports the verdict later (exit `0` green, `1` failed,

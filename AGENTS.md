@@ -47,9 +47,9 @@ command and returning; the verdict is a separate, later question.
 
 - Public repository: <https://github.com/sarielhp/BasicPlanarGraphs.jl>, MIT licensed,
   default branch `main`. CI (`.github/workflows/ci.yml`) runs `Pkg.test()` via
-  `julia-actions/julia-runtest` on Julia 1.10 and the latest release, Linux x64, macOS
-  aarch64 and Windows x64; build and test locally before pushing. `Manifest.toml` is
-  git-ignored (it is a package, not an application), so a fresh clone resolves its own.
+  `julia-actions/julia-runtest` on Linux x64 only, for Julia 1.10 and the latest release;
+  build and test locally before pushing. `Manifest.toml` is git-ignored (it is a package,
+  not an application), so a fresh clone resolves its own.
 - CI must not generate or release binaries. The workflow only builds the package
   in-place to run the tests: no compiled/binary artifacts, no `Pkg.build` outputs or
   uploaded build products, no GitHub releases, tags, or uploads to a package registry.
