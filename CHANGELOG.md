@@ -36,7 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   syntax, rejects duplicate and self-loop edges, requires the two sections to
   describe the same graph, and reports errors as `source:line: message`.
 - Documentation: new pages on planarity and embedding, grid drawing, and graph
-  files; the API reference and the README cover the new names.
+  files; the API reference and the README cover the new names. The README now
+  states that the repository was written by an AI coding assistant and what that
+  implies (tests are the authority, independent reimplementations of the cited
+  algorithms, no warranty), and credits the papers and reference implementations
+  consulted, with their licenses.
 - `examples/test_planarity.jl`: an end-to-end run on a real road network from
   SNAP (TIGER/Line Pennsylvania, ~1.09M vertices). It downloads and caches the
   dataset, cleans the directed listing into a pure undirected graph, and for

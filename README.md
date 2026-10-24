@@ -7,6 +7,33 @@ Planar graphs with an abstract embedding (a rotation system): linear-time
 planarity testing and embedding, the Lipton–Tarjan planar separator, straight-line
 grid drawings, and a plain-text graph file format.
 
+## This code was written by an AI
+
+Everything in this repository — `src/`, `test/`, `docs/`, the example, the tooling
+and this README — was written by a large language model through an AI coding
+assistant, in sessions with the maintainer, who chose what to build, the
+algorithms and the interfaces, read the results, asked for changes, and ran the
+checks. It is a product of *vibe programming*: the code comes out of conversation
+and iteration, not out of a human typing it.
+
+Please weigh that when you use it:
+
+- **The tests are the guarantee, not the prose.** Every claim in `docs/` should be
+  backable by a test or by a run of the example; the suite (1,500+ tests,
+  including an independent `Graphs.jl`-based validator and a brute-force optimal
+  separator oracle) is what is actually checked, and `tools/gate` runs it. Where
+  a document and a test disagree, the test wins.
+- **It can be confidently wrong.** The AI has produced plausible-looking
+  arguments that were wrong, and code that passed a review and failed on a
+  corner case. The algorithms are reimplementations of published work and of the
+  reference implementations credited below — not verbatim copies — but
+  independent reimplementation is exactly the kind of task that hides bugs.
+- **No warranty.** MIT says it plainly. Treat this as an unreviewed contribution
+  until you have read the part you depend on.
+
+The maintainer is the author of record and is responsible for what is here; the
+AI is the one that typed it.
+
 ## Documentation
 
 Full documentation lives in [`docs/`](docs/README.md):

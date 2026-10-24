@@ -7,6 +7,11 @@ drawings, and a plain-text graph file format.
 This directory describes the library. Every statement here is about the code in
 `src/`; the tests that pin the behaviour are in `test/`.
 
+Like the rest of the repository, these pages were written by an AI coding
+assistant working with the maintainer; where a page and a test disagree, the test
+is right. See [the README](https://github.com/sarielhp/BasicPlanarGraphs.jl#this-code-was-written-by-an-ai)
+for what that means in practice.
+
 ## Contents
 
 | Page | What it covers |
