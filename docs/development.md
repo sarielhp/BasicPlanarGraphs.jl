@@ -117,9 +117,10 @@ julia --project=. benchmark/run.jl --suite=phases   # internals of separator
 
 ## Releases
 
-A release is a Git tag. The package is not registered in the General registry
-and there is no plan to register it for the foreseeable future; installation
-stays `Pkg.add(url = "https://github.com/sarielhp/BasicPlanarGraphs.jl")`.
+A release is a Git tag plus a GitHub Release object whose notes are the
+matching `CHANGELOG.md` section. The package is not registered in the General
+registry and there is no plan to register it for the foreseeable future;
+installation stays `Pkg.add(url = "https://github.com/sarielhp/BasicPlanarGraphs.jl")`.
 
 1. Set `version` in `Project.toml` and add the matching
    `## [X.Y.Z] - YYYY-MM-DD` section to `CHANGELOG.md`.
@@ -127,6 +128,9 @@ stays `Pkg.add(url = "https://github.com/sarielhp/BasicPlanarGraphs.jl")`.
 3. Commit, then create an annotated tag: `git tag -a vX.Y.Z -m "vX.Y.Z"`.
 4. `tools/push` pushes the branch; push the tag explicitly with
    `git push origin vX.Y.Z`.
+5. Create the GitHub Release from the changelog section, for example
+   `gh release create vX.Y.Z --verify-tag --title "vX.Y.Z" --notes-file NOTES.md`
+   with `NOTES.md` holding that section's text.
 
 CI never creates a tag, a GitHub release, or a registry entry.
 
