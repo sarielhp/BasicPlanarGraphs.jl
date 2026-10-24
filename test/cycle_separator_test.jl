@@ -1,21 +1,23 @@
-# The Har-Peled / Nayyeri cycle separator: the result must be a genuine simple
-# cycle of the input graph whose two sides are balanced. All checks use
-# Graphs.jl primitives, so they do not share code with the implementation.
+# The Har-Peled / Nayyeri cycle separator: the result must be a closed walk of
+# the input graph (a simple cycle when the graph is a triangulation) whose two
+# sides are balanced. The checks use Graphs.jl primitives, so they do not share
+# code with the implementation.
 
-# Check that `C` is a simple cycle of `g` and that the two sides of the cycle
-# form a partition with no edge crossing the cycle.
-function check_cycle(g, C; balance = 2 / 3)
+# Check that `C` is a closed walk of `g` (simple when `simple` is set), that the
+# two sides form a partition with no edge crossing the walk, and that every
+# component of the graph without the walk is at most `balance * n`.
+function check_cycle(g, C; balance = 2 / 3, simple = false)
     n = nv(g)
     @test C isa Vector{Int}
     @test length(C) >= 3
-    @test allunique(C)
+    simple && @test allunique(C)
     @test all(v -> 1 <= v <= n, C)
     for i in eachindex(C)
         @test has_edge(g, C[i], C[mod1(i + 1, length(C))])
     end
 
     inside, outside = cycle_sides(g, C)
-    @test sort(vcat(inside, outside, C)) == collect(1:n)
+    @test sort(vcat(inside, outside, unique(C))) == collect(1:n)
     @test isempty(intersect(inside, outside))
     @test isempty(intersect(inside, C))
     @test isempty(intersect(outside, C))
@@ -30,6 +32,11 @@ function check_cycle(g, C; balance = 2 / 3)
     end
 
     @test max(length(inside), length(outside)) <= balance * n
+    keep = trues(n)
+    keep[C] .= false
+    sub, _ = induced_subgraph(g.graph, findall(keep))
+    components = connected_components(sub)
+    @test isempty(components) || maximum(length, components) <= balance * n
     # cycle_separator reports the smaller side as the inside
     @test length(inside) <= length(outside)
     return inside, outside
@@ -63,9 +70,9 @@ end
         for n in (5, 6, 10, 30, 100, 400), seed = 1:3
             g = random_triangulation(n; rng = MersenneTwister(seed))
             C = cycle_separator(g)
-            check_cycle(g, C)
-            # On a triangulation no shortcut is needed, so the paper's bound
-            # applies to the returned cycle.
+            check_cycle(g, C; simple = true)
+            # On a triangulation the walk is a cycle and the paper's bound
+            # applies to it.
             @test length(C) <= 2 * sqrt(2 * n) + 1
         end
     end
@@ -96,11 +103,46 @@ end
         @test_throws ArgumentError cycle_separator(planar_cycle(2))
         # not connected
         @test_throws ArgumentError cycle_separator(PlanarGraph([[2], [1], Int[]]))
-        # not 2-connected
-        @test_throws ArgumentError cycle_separator(PlanarGraph([[2], [1, 3], [2]]))
-        @test_throws ArgumentError cycle_separator(
-            PlanarGraph([[2, 3], [3], [1, 2], Int[]]),
+        # not planar: sorted neighbours are not a planar rotation of a grid
+        graph = planar_grid(4, 4).graph
+        crossed = PlanarGraph(graph, [collect(neighbors(graph, v)) for v = 1:16])
+        @test_throws ArgumentError cycle_separator(crossed)
+    end
+
+    @testset "graphs with bridges, cut vertices and large faces" begin
+        rng = MersenneTwister(31)
+        tested = 0
+        for trial = 1:300
+            g = random_triangulation(rand(rng, 3:120); rng)
+            g = thin_out(g, rand(rng) * 0.85, rng)
+            is_connected(g.graph) || continue
+            check_cycle(g, cycle_separator(g))
+            tested += 1
+        end
+        @test tested > 100
+        # a path, a star-like tree and a triangle with a pendant edge
+        for g in (
+            planar_path(3),
+            planar_path(40),
+            PlanarGraph([[4], [3, 4], [4, 2], [1, 2, 3]]),
+            planar_grid(2, 60),
         )
+            check_cycle(g, cycle_separator(g))
+        end
+    end
+
+    @testset "closed walks" begin
+        # A triangle with a pendant edge: the walk goes out along the spike and
+        # back, so every vertex is on it and both sides are empty.
+        g = PlanarGraph([[4], [3, 4], [4, 2], [1, 2, 3]])
+        @test cycle_sides(g, [1, 4, 3, 2, 4]) == (Int[], Int[])
+        # A spike into a region puts its end on the walk and leaves the rest alone.
+        grid = planar_grid(3, 3)
+        ring = [1, 2, 3, 6, 9, 8, 7, 4]
+        @test cycle_sides(grid, ring) == (Int[], [5])
+        @test cycle_sides(grid, [ring; 5; 4]) == (Int[], Int[])
+        # A walk that goes around twice crosses itself and is rejected.
+        @test_throws ArgumentError cycle_sides(grid, [1, 2, 5, 4, 1, 2, 5, 4])
     end
 
     @testset "repeated calls" begin
@@ -112,16 +154,16 @@ end
 
     @testset "forced ladder step" begin
         # Exercise the ladder branch of phase 3, which the default step skips
-        # on small graphs.
-        for g in (planar_grid(12, 12), planar_wheel(60))
+        # on small graphs; the ladder only runs on triangulations.
+        for g in (
+            triangulate(planar_grid(12, 12)),
+            planar_wheel(60),
+            random_triangulation(150; rng = MersenneTwister(2)),
+        )
             dg = BasicPlanarGraphs.DartGraph(g)
             for delta in (3, 5, 8)
                 C = BasicPlanarGraphs._cycle_separator(dg; delta = delta)
-                @test length(C) >= 3
-                @test allunique(C)
-                for i in eachindex(C)
-                    @test has_edge(g, C[i], C[mod1(i + 1, length(C))])
-                end
+                check_cycle(g, C; simple = true)
             end
         end
     end

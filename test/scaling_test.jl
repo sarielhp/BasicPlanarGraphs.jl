@@ -26,4 +26,22 @@ end
     t_small = measure(tri_small)
     t_large = measure(tri_large)
     @test t_large <= 30 * t_small + 0.05
+
+    # One huge face used to make the cycle separator quadratic (a ladder has a
+    # single outer face of length n): an 8-fold size is allowed 25 times the time.
+    function measure_cycle(g)
+        cycle_separator(g)
+        return minimum(@elapsed(cycle_separator(g)) for _ = 1:2)
+    end
+    ladder_small = planar_grid(2, 5_000)
+    ladder_large = planar_grid(2, 40_000)
+    @test measure_cycle(ladder_large) <= 25 * measure_cycle(ladder_small) + 0.05
+
+    # The same single huge face made triangulate quadratic as well.
+    function measure_triangulate(g)
+        triangulate(g)
+        return minimum(@elapsed(triangulate(g)) for _ = 1:2)
+    end
+    @test measure_triangulate(planar_grid(2, 40_000)) <=
+          25 * measure_triangulate(planar_grid(2, 5_000)) + 0.05
 end

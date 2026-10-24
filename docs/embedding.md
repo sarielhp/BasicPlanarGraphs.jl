@@ -197,7 +197,7 @@ Every embedding query is linear in `n + m`:
 | `faces`, `nfaces` | `O(n + m)` | `O(n + m)` |
 | `is_planar_embedding` | `O(n + m)` | `O(n + m)` |
 | `dual` | `O(n + m)` | `O(n + m)` |
-| `triangulate` | each face is examined once; inserting a chord copies the two new orbits | `O(n + m)` |
+| `triangulate` | each face is examined once; the neighbours of its smallest-degree vertex are marked, and the smallest degrees sum to `O(n)` | `O(n + m)` |
 
 Validation uses a sort per vertex to compare against the neighbour list, so
 construction is `O(sum_v d_v log d_v)` in the worst case; for the bounded-degree

@@ -143,24 +143,25 @@ time. Fields `separator`, `parts`, `part_of`, and with `subgraphs = true`
 
 ### `cycle_separator(g) -> Vector{Int}`
 
-A balanced cycle separator of a connected, 2-connected `PlanarGraph` with at
-least three vertices: a simple cycle of `g` (consecutive vertices, including the
-last and the first, are adjacent; no repeats) whose two sides each hold at most
-`2/3` of the vertices. The vector is oriented so that the left — the `inside`
-reported by `cycle_sides` — is the smaller side. `O(nv + ne)` time, following
-Har-Peled–Nayyeri; the cycle is short in the internal triangulation and on
-already-triangulated graphs in `g` itself. `ArgumentError` for a disconnected
-graph, a graph with fewer than three vertices, or one with a bridge or cut
-vertex. Deterministic. See [Cycle separator](cycle_separator.md).
+A balanced cycle separator of a connected `PlanarGraph` with at least three
+vertices: a closed walk of `g` (consecutive vertices, including the last and the
+first, are adjacent) whose two sides each hold at most `2/3` of the vertices. The
+vector is oriented so that the left — the `inside` reported by `cycle_sides` — is
+the smaller side. `O(nv)` time. On a triangulation the walk is a simple cycle with
+`O(sqrt(nv))` vertices (Har-Peled–Nayyeri); on other graphs it may repeat vertices
+and edges and its length is not bounded. `ArgumentError` for a disconnected
+graph, a graph with fewer than three vertices, or a rotation system that is not a
+planar embedding. Deterministic. See [Cycle separator](cycle_separator.md).
 
 ### `cycle_sides(g, cycle) -> (inside, outside)`
 
-The two sides of the simple cycle `cycle` in the connected `PlanarGraph` `g`.
+The two sides of the closed walk `cycle` in the connected `PlanarGraph` `g`.
 Rotations are counter-clockwise, so the vertices to the left of the traversal are
 `inside` and those to the right are `outside`; reversing `cycle` swaps them.
-Cycle vertices are in neither result, and both vectors are sorted. `ArgumentError`
-when `cycle` is not a simple cycle of `g` (too short, repeated vertex, vertex out
-of range, or two consecutive vertices not adjacent) or when `g` is disconnected.
+Walk vertices are in neither result, and both vectors are sorted. The walk may
+repeat vertices and edges. `ArgumentError` when `cycle` is not a closed walk of
+`g` (too short, vertex out of range, two consecutive vertices not adjacent), when
+it crosses itself, or when `g` is disconnected.
 
 ## Drawing
 

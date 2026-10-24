@@ -45,7 +45,7 @@ Full documentation lives in [`docs/`](docs/README.md):
 | [Grid drawing](docs/drawing.md) | `grid_drawing`, `GridDrawing`, grid-size bounds, the Fraysseix–Pach–Pollack placement |
 | [Separator](docs/separator.md) | guarantees, the Lipton–Tarjan stages, pruning, disconnected inputs, complexity |
 | [Separator partition](docs/partition.md) | `separator_partition`, the recursive partition into parts of at most `r` vertices, guarantees and cost |
-| [Cycle separator](docs/cycle_separator.md) | guarantees, the left/right convention, the Har-Peled–Nayyeri phases, shortcutting chords |
+| [Cycle separator](docs/cycle_separator.md) | guarantees, the left/right convention, the Har-Peled–Nayyeri phases, lifting to closed walks |
 | [Generators and triangulation](docs/generators.md) | `planar_path`, `planar_cycle`, `planar_grid`, `planar_wheel`, `random_triangulation`, `triangulate` |
 | [Graph files](docs/io.md) | the sectioned text format, the writers and readers, what is rejected |
 | [API reference](docs/api.md) | every exported name with signatures, return types, and errors |
@@ -100,17 +100,16 @@ of the vertices, no edge between `A` and `B`, `|A|, |B| <= balance * n`, and
 `O(n)` in the worst case; `balance` must lie in `[2/3, 1)`. The stages, the
 guarantees and the proof sketch: [Separator](docs/separator.md).
 
-`cycle_separator(g)` returns a balanced separator that is a genuine **simple
-cycle of `g`** rather than a vertex set — consecutive vertices, including the
-last and the first, are adjacent, and no vertex repeats. `cycle_sides(g, C)`
-returns the vertices on the two sides; rotations are counter-clockwise, so the
-left of the traversal is the inside, and the cycle is oriented with the smaller
-side inside. Both sides hold at most `2/3` of the vertices, and the separator
-phases and the shortcut are linear in the size of the internal triangulation
-(following Har-Peled and Nayyeri). The internal triangulation is
-shortcut back to edges of `g`, so the result is a cycle of the graph you passed
-in, not of its triangulation. Details, including the shortcut (which is not in
-the paper or in OGDF): [Cycle separator](docs/cycle_separator.md).
+`cycle_separator(g)` returns a balanced separator that is a **closed walk of `g`**
+rather than a vertex set — consecutive vertices, including the last and the first,
+are adjacent. `cycle_sides(g, C)` returns the vertices on the two sides;
+rotations are counter-clockwise, so the left of the traversal is the inside, and
+the walk is oriented with the smaller side inside. Both sides hold at most `2/3`
+of the vertices and the running time is `O(n)`, for every connected graph. If
+`g` is a triangulation the walk is a simple cycle with `O(sqrt(n))` vertices
+(Har-Peled and Nayyeri); otherwise a fill edge of a triangulation becomes a path
+along its face, so the walk may repeat vertices and edges and its length is not
+bounded. Details: [Cycle separator](docs/cycle_separator.md).
 
 ```julia
 g = planar_grid(20, 20)
@@ -162,7 +161,7 @@ corresponding `src/` file names it.
 | Planarity testing and embedding (`src/planarity.jl`) | U. Brandes, *The Left-Right Planarity Test* (2009) | [NetworkX](https://networkx.org) `algorithms/planarity.py`: the iterative formulation of the two DFS passes, the nesting-depth rules and the conflict-stack operations | BSD-3-Clause |
 | Straight-line grid drawing (`src/grid_drawing.jl`) | H. de Fraysseix, J. Pach, R. Pollack, *How to draw a planar graph on a grid* (Combinatorica 10, 1990) | [OGDF](https://ogdf.github.io) `src/ogdf/planarlayout/FPPLayout.cpp`: the shelling order over a candidate list, the level-by-level placement and the x-offset pass | GPL-2.0 or GPL-3.0 |
 | Planar separator (`src/separator.jl`) | R. J. Lipton, R. E. Tarjan, *A Separator Theorem for Planar Graphs* (SIAM J. Appl. Math. 36(2), 1979) | — | — |
-| Cycle separator (`src/cycle_separator.jl`, `src/cycle_shortcut.jl`) | S. Har-Peled, A. Nayyeri, *A Simple Algorithm for Computing a Cycle Separator* (Comput. Geom. 83, 2019) | [OGDF](https://ogdf.github.io) `src/ogdf/separator/SeparatorHarPeled.cpp`: the dual-tree fundamental cycle, the face levels, the nested level cycles and the ladder | GPL-2.0 or GPL-3.0 |
+| Cycle separator (`src/cycle_separator.jl`, `src/cycle_walk.jl`) | S. Har-Peled, A. Nayyeri, *A Simple Algorithm for Computing a Cycle Separator* (Comput. Geom. 83, 2019) | [OGDF](https://ogdf.github.io) `src/ogdf/separator/SeparatorHarPeled.cpp`: the dual-tree fundamental cycle, the face levels, the nested level cycles and the ladder | GPL-2.0 or GPL-3.0 |
 | `is_planar` (re-exported) | same criterion as above | [Graphs.jl](https://github.com/JuliaGraphs/Graphs.jl) `src/planarity.jl` | BSD-2-Clause |
 
 No source file was copied: the Julia code is an independent implementation, and

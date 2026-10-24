@@ -96,4 +96,55 @@ end
             @test triangulate(g) == g
         end
     end
+
+    @testset "sparse graphs with large faces" begin
+        # Properties of the result on connected graphs with bridges, cut
+        # vertices and big faces: a simple maximal planar supergraph that keeps
+        # the original edges and their rotation order.
+        rng = MersenneTwister(5)
+        tested = 0
+        for trial = 1:300
+            g = thin_out(random_triangulation(rand(rng, 3:120); rng), rand(rng) * 0.95, rng)
+            is_connected(g.graph) || continue
+            t = triangulate(g)
+            n = nv(g)
+            @test ne(t) == 3n - 6
+            @test all_faces_triangular(t)
+            @test is_planar_embedding(t)
+            rg, rt = rotation(g), rotation(t)
+            for v = 1:n
+                kept = [w for w in rt[v] if has_edge(g, v, w)]
+                @test BasicPlanarGraphs.same_cyclic_order(kept, rg[v])
+            end
+            tested += 1
+        end
+        @test tested > 50
+    end
+
+    @testset "faces whose vertices are adjacent elsewhere" begin
+        # K_{2,n} has hubs that share all of its faces; a ladder has a rung
+        # between every pair of opposite vertices of its outer face. A chord
+        # between such vertices would be a parallel edge.
+        for g in (planar_grid(2, 40), planar_grid(3, 25), planar_wheel(40))
+            t = triangulate(g)
+            @test ne(t) == 3nv(g) - 6
+            @test all_faces_triangular(t)
+        end
+        rot = vcat([collect(3:12)], [reverse(collect(3:12))], [[1, 2] for _ = 3:12])
+        k2n = PlanarGraph(rot)
+        @test is_planar_embedding(k2n)
+        t = triangulate(k2n)
+        @test ne(t) == 3nv(k2n) - 6
+        @test all_faces_triangular(t)
+    end
+
+    @testset "chords are spread over the vertices of a face" begin
+        # Going around the face clips every other vertex, so no vertex collects
+        # the chords of the whole face (a fan from one vertex would give a
+        # degree of n - 1): the degree stays logarithmic.
+        for g in (planar_cycle(4000), planar_path(4000), planar_grid(2, 2000))
+            t = triangulate(g)
+            @test maximum(degree(t, v) for v = 1:nv(t)) <= 3 * ceil(Int, log2(nv(g)))
+        end
+    end
 end

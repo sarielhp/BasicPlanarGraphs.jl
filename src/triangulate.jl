@@ -1,18 +1,41 @@
 # Triangulation of an embedded graph by inserting chords inside faces.
+#
+# Two linear passes over each face, both going around its boundary and clipping
+# ears: the chord `ac` between the neighbours of a boundary position `b` is
+# added and `b` leaves the boundary.
+#
+#   * A boundary that repeats a vertex (a bridge or a cut vertex) first loses its
+#     repeated occurrences. Such an occurrence can always be clipped: the vertex
+#     appears twice, so `a` and `c` lie in different blocks around it and are
+#     not adjacent. After a clip the next occurrence is skipped, so the chords
+#     are spread over the vertices instead of chaining through one of them.
+#   * The remaining simple cycle is clipped at every position whose neighbours
+#     `a` and `c` are not adjacent yet; otherwise the next position is tried.
+#     Among four consecutive vertices `a, b, c, d` the chord `ac` or `bd` is
+#     always new, since two edges outside the face joining `a, c` and `b, d`
+#     would cross, so a failure is followed by a success. After a clip the next
+#     vertex is skipped, so every pass removes a constant fraction of the face.
+#
+# The adjacency test scans the smaller of the two degrees. A test that succeeds
+# is charged to the chord it adds, one that fails to the edge it finds, and the
+# sum over the edges of the smaller degree is `O(n)` in a planar graph (Chiba and
+# Nishizeki), so the whole triangulation is `O(n + m)`, with no hashing, and never
+# adds an edge that is already there.
 
 """
     triangulate(g) -> same type as g
 
 Add edges to `g` until every face is a triangle, preserving the embedding and
-the vertex set. The result is a maximal planar graph when the input is
-2-connected.
+the vertex set, in `O(nv + ne)` time. No edge is added twice, so a simple graph
+stays simple, and the new edges are spread over the vertices of a face instead of
+fanning from one of them. The result is a maximal planar graph when `g` is
+connected with at least three vertices.
 
-Chords are inserted inside faces of the given rotation system, so the result is
-verified before it is returned: when a face is not a simple cycle and the
-insertion cannot go on, or when the rotation system does not describe a planar
-embedding in the first place, an `ArgumentError` is raised instead of a graph
-that is not a triangulation. For a [`PlanarGraph`](@ref) the result is returned
-as a `PlanarGraph`.
+A face boundary that repeats a vertex (a bridge or a cut vertex) is handled. An
+`ArgumentError` is raised when the rotation system does not describe a planar
+embedding, or when a component has fewer than three vertices but an edge (no
+chord can make its face a triangle). For a [`PlanarGraph`](@ref) the result is
+returned as a `PlanarGraph`.
 """
 function triangulate(g::DartGraph)
     h = _add_chords!(copy(g))
@@ -22,95 +45,102 @@ end
 
 triangulate(g::PlanarGraph) = PlanarGraph(triangulate(DartGraph(g)))
 
-# `region` optionally records, for every dart, the face of the original graph
-# the dart's face lies in. It is used by the cycle separator to map a cycle of
-# the triangulation back to the input.
-function _add_chords!(h::DartGraph, region::Union{Nothing,Vector{Int}} = nothing)
+function _add_chords!(h::DartGraph)
+    euler_holds(h) || throw(
+        ArgumentError(
+            "cannot triangulate: the rotation system does not describe a planar embedding",
+        ),
+    )
     orbits, _ = face_orbits(h)
-    adjacency = [Set{Int}() for _ = 1:h.n]
-    for d = 1:ndarts(h)
-        push!(adjacency[tail(h, d)], h.head[d])
-    end
-    # Every simple face is triangulated in one pass: its whole fan of chords is
-    # computed from the original boundary and inserted directly. A face whose
-    # boundary repeats a vertex is first cut at the second appearance of that
-    # vertex, so the remaining face becomes simple and can use a fan too.
-    pending = orbits
-    while !isempty(pending)
-        orbit = pop!(pending)
+    occurrences = zeros(Int, h.n)
+    for orbit in orbits
         length(orbit) <= 3 && continue
-        _fan_triangulate!(h, orbit, adjacency, region) && continue
-        orbit = _peel_repeats!(h, orbit, adjacency, region)
+        orbit = _peel_repeats!(h, orbit, occurrences)
         length(orbit) <= 3 && continue
-        _fan_triangulate!(h, orbit, adjacency, region) && continue
-        chord = _find_chord(orbit, h, adjacency)
-        chord === nothing && continue
-        faces_added = _insert_chord!(h, orbit, chord[1], chord[2], adjacency)
-        if region !== nothing
-            # The two darts of the new chord lie in the same region as the
-            # face that was split; `add_dart!` appended them in this order.
-            r = region[orbit[1]]
-            push!(region, r)
-            push!(region, r)
-        end
-        push!(pending, faces_added[1])
-        push!(pending, faces_added[2])
+        _clip_ears!(h, orbit)
     end
     return h
 end
 
-# Cut off the triangle at every second appearance of a repeated boundary
-# vertex: connect the vertex before that appearance to the vertex after it.
-# The boundary is kept as a linked list so the whole sweep is linear; the
-# chord is skipped when it already exists (a parallel edge would result) or
-# when both neighbours are the same vertex. Return the remaining boundary walk.
-function _peel_repeats!(
+# --- faces that repeat a vertex ------------------------------------------
+
+# Clip the occurrences of repeated vertices off the boundary walk `orbit`, going
+# around the list of those occurrences and skipping the one next to a clip.
+# `occurrences[v]` counts the occurrences of `v` that are left; it is all zero
+# again on return. Return the remaining boundary walk, which is a simple cycle.
+function _peel_repeats!(h::DartGraph, orbit::Vector{Int}, occurrences::Vector{Int})
+    verts = Int[tail(h, d) for d in orbit]
+    for v in verts
+        occurrences[v] += 1
+    end
+    candidates = findall(t -> occurrences[verts[t]] >= 2, eachindex(verts))
+    result =
+        isempty(candidates) ? orbit :
+        _clip_repeats!(h, orbit, verts, occurrences, candidates)
+    for v in verts
+        occurrences[v] = 0
+    end
+    return result
+end
+
+function _clip_repeats!(
     h::DartGraph,
     orbit::Vector{Int},
-    adjacency,
-    region::Union{Nothing,Vector{Int}},
+    verts::Vector{Int},
+    occurrences::Vector{Int},
+    candidates::Vector{Int},
 )
     k = length(orbit)
-    verts = [tail(h, d) for d in orbit]
     prevp = [mod1(t - 1, k) for t = 1:k]
     nextp = [mod1(t + 1, k) for t = 1:k]
     dartp = copy(orbit)
-    repeats = falses(k)
-    seen = Set{Int}()
-    for t = 1:k
-        if verts[t] in seen
-            repeats[t] = true
-        else
-            push!(seen, verts[t])
-        end
-    end
-    r = region === nothing ? 0 : region[orbit[1]]
     removed = falses(k)
-    changed = false
-    for t = 1:k
-        repeats[t] || continue
+    ring = _Ring(k, candidates)
+    cur = candidates[1]
+    while ring.size > 0
+        t = cur
+        cur = _ring_next(ring, t)
+        _ring_remove!(ring, t)
+        occurrences[verts[t]] >= 2 || continue
         b = prevp[t]
         c = nextp[t]
-        vb = verts[b]
-        vc = verts[c]
-        (vb == vc || vc in adjacency[vb]) && continue
-        forward = add_dart!(h, vb, vc, dartp[b])
-        backward = add_dart!(h, vc, vb, dartp[c])
-        h.twin[forward] = backward
-        h.twin[backward] = forward
-        push!(adjacency[vb], vc)
-        push!(adjacency[vc], vb)
-        if region !== nothing
-            push!(region, r)
-            push!(region, r)
-        end
+        verts[b] == verts[c] && throw(_not_triangulable())
+        dartp[b] = _add_chord!(h, verts[b], verts[c], dartp[b], dartp[c])
         nextp[b] = c
         prevp[c] = b
-        dartp[b] = forward
         removed[t] = true
-        changed = true
+        occurrences[verts[t]] -= 1
+        cur == c && ring.size > 0 && (cur = _ring_next(ring, c))
     end
-    changed || return orbit
+    return _remaining_walk(dartp, nextp, removed)
+end
+
+# A circular doubly linked list over some of the positions `1..k`.
+mutable struct _Ring
+    next::Vector{Int}
+    prev::Vector{Int}
+    size::Int
+end
+
+function _Ring(k::Int, members::Vector{Int})
+    ring = _Ring(zeros(Int, k), zeros(Int, k), length(members))
+    for (i, t) in enumerate(members)
+        ring.next[t] = members[mod1(i + 1, length(members))]
+        ring.prev[t] = members[mod1(i - 1, length(members))]
+    end
+    return ring
+end
+
+_ring_next(ring::_Ring, t::Int) = ring.next[t]
+
+function _ring_remove!(ring::_Ring, t::Int)
+    ring.next[ring.prev[t]] = ring.next[t]
+    ring.prev[ring.next[t]] = ring.prev[t]
+    ring.size -= 1
+    return nothing
+end
+
+function _remaining_walk(dartp::Vector{Int}, nextp::Vector{Int}, removed::BitVector)
     start = findfirst(!, removed)
     out = Int[]
     t = start
@@ -122,101 +152,75 @@ function _peel_repeats!(
     return out
 end
 
-# True when the vertices of the face walk `orbit` are pairwise distinct, i.e.
-# the face is a simple cycle. Small faces (the common case in a grid) are
-# checked without allocating; `allunique` otherwise.
-function _is_simple_face(h::DartGraph, orbit::Vector{Int})
-    k = length(orbit)
-    if k <= 8
-        for a = 1:(k-1), b = (a+1):k
-            tail(h, orbit[a]) == tail(h, orbit[b]) && return false
-        end
-        return true
-    end
-    return allunique(tail(h, orbit[t]) for t = 1:k)
+_not_triangulable() =
+    ArgumentError("cannot triangulate: a face boundary cannot be made a simple cycle")
+
+# Insert the chord `u v` inside a face: the new dart at `u` goes after `du`, the
+# dart leaving `u` along the face, and the one at `v` after `dv`. Returns the
+# dart `u -> v`.
+function _add_chord!(h::DartGraph, u::Int, v::Int, du::Int, dv::Int)
+    forward = add_dart!(h, u, v, du)
+    backward = add_dart!(h, v, u, dv)
+    h.twin[forward] = backward
+    h.twin[backward] = forward
+    return forward
 end
 
-# Triangulate a simple face by a fan from one of its vertices, inserting all
-# `k - 3` chords at once. Only an apex whose every fan chord is still free can
-# be used: a fan chord that already exists would duplicate an edge. Return
-# `false` without touching `h` when no such apex exists, so the caller can fall
-# back to the chord-at-a-time path.
-function _fan_triangulate!(
-    h::DartGraph,
-    orbit::Vector{Int},
-    adjacency,
-    region::Union{Nothing,Vector{Int}},
-)
+# --- simple faces --------------------------------------------------------
+
+# Clip the simple face with the darts `orbit` down to a triangle, going around
+# it. A test that failed is remembered as the pair of neighbours it was made
+# with, so it is not repeated until a neighbour changes. Each pass removes at
+# least a third of the vertices, so there are at most about `3k` visits; the
+# bound only guards against an input that is not a planar embedding.
+function _clip_ears!(h::DartGraph, orbit::Vector{Int})
     k = length(orbit)
-    _is_simple_face(h, orbit) || return false
-    for s = 1:k
-        apex = tail(h, orbit[s])
-        free = true
-        for t = 2:(k-2)
-            if tail(h, orbit[mod1(s + t, k)]) in adjacency[apex]
-                free = false
-                break
-            end
+    verts = Int[tail(h, d) for d in orbit]
+    dart = copy(orbit)
+    prevp = [mod1(t - 1, k) for t = 1:k]
+    nextp = [mod1(t + 1, k) for t = 1:k]
+    failed = zeros(Int, k, 2)
+    remaining = k
+    cur = 1
+    for _ = 1:(20k+20)
+        remaining > 3 || return nothing
+        a = prevp[cur]
+        c = nextp[cur]
+        if _fails(h, failed, cur, verts[a], verts[c])
+            cur = c
+        else
+            dart[a] = _add_chord!(h, verts[a], verts[c], dart[a], dart[c])
+            nextp[a] = c
+            prevp[c] = a
+            remaining -= 1
+            cur = nextp[c]
         end
-        free || continue
-        _add_fan!(h, orbit, s, region)
-        for t = 2:(k-2)
-            u = tail(h, orbit[mod1(s + t, k)])
-            push!(adjacency[apex], u)
-            push!(adjacency[u], apex)
-        end
-        return true
+    end
+    throw(_not_triangulable())
+end
+
+# True when the chord between the vertices `u` and `w` cannot be added, because
+# they are adjacent; the answer is kept for `b` while its neighbours stay.
+function _fails(h::DartGraph, failed::Matrix{Int}, b::Int, u::Int, w::Int)
+    (failed[b, 1] == u && failed[b, 2] == w) && return true
+    _adjacent(h, u, w) || return false
+    failed[b, 1] = u
+    failed[b, 2] = w
+    return true
+end
+
+# Adjacent vertices, found by scanning the one of smaller degree.
+function _adjacent(h::DartGraph, u::Int, w::Int)
+    h.deg[u] <= h.deg[w] || return _adjacent(h, w, u)
+    for d in incident_darts(h, u)
+        h.head[d] == w && return true
     end
     return false
 end
 
-# Insert the fan from `tail(orbit[s])` into the face `orbit`. Every non-apex
-# vertex receives exactly one chord, so a single anchor per vertex is enough; at
-# the apex the new darts are chained in boundary order.
-function _add_fan!(
-    h::DartGraph,
-    orbit::Vector{Int},
-    s::Int,
-    region::Union{Nothing,Vector{Int}},
-)
-    k = length(orbit)
-    apex = tail(h, orbit[s])
-    anchor = orbit[s]
-    r = region === nothing ? 0 : region[orbit[1]]
-    for t = 2:(k-2)
-        pos = mod1(s + t, k)
-        u = tail(h, orbit[pos])
-        forward = add_dart!(h, apex, u, anchor)
-        backward = add_dart!(h, u, apex, orbit[pos])
-        h.twin[forward] = backward
-        h.twin[backward] = forward
-        anchor = forward
-        if region !== nothing
-            push!(region, r)
-            push!(region, r)
-        end
-    end
-    return nothing
-end
+# --- verification --------------------------------------------------------
 
-# Triangulate `g` and report, for every dart of the result, the face of `g`
-# whose interior contains the dart's face.
-function _triangulate_with_regions(g::DartGraph)
-    h = copy(g)
-    orbits, _ = face_orbits(h)
-    region = zeros(Int, ndarts(h))
-    for (f, orbit) in enumerate(orbits)
-        for d in orbit
-            region[d] = f
-        end
-    end
-    _add_chords!(h, region)
-    _verify_triangulation(h)
-    return h, region
-end
-
-# Chord insertion is only sound for faces that are simple cycles; make sure the
-# result really is a triangulation of a valid embedding.
+# The result must be a triangulation of a valid embedding.
 function _verify_triangulation(h::DartGraph)
     orbits, _ = face_orbits(h)
     all(orbit -> length(orbit) == 3, orbits) ||
@@ -224,72 +228,4 @@ function _verify_triangulation(h::DartGraph)
     euler_holds(h) ||
         throw(ArgumentError("cannot triangulate: the rotation system is not planar"))
     return nothing
-end
-
-# Steps to try for a chord, the most balanced first. A chord at `step` leaves a
-# face of length `step + 1` on one side, so `step` near `k/2` halves the face.
-# Splitting off one vertex at a time would copy the whole orbit at every step,
-# which is quadratic on a face with many vertices.
-function _chord_steps(k::Int)
-    half = k ÷ 2
-    steps = Int[]
-    for d = 0:half
-        low = half - d
-        2 <= low <= k - 2 && push!(steps, low)
-        d == 0 && continue
-        high = half + d
-        2 <= high <= k - 2 && push!(steps, high)
-    end
-    return steps
-end
-
-# First chord that splits the face `orbit` into two proper faces.
-function _find_chord(orbit::Vector{Int}, h::DartGraph, adjacency)
-    k = length(orbit)
-    k >= 4 || return nothing
-    steps = _chord_steps(k)
-    for i = 1:k
-        vi = tail(h, orbit[i])
-        for step in steps
-            j = mod1(i + step, k)
-            vj = tail(h, orbit[j])
-            vi == vj && continue
-            vj in adjacency[vi] && continue
-            return (i, j)
-        end
-    end
-    return nothing
-end
-
-# Insert the chord (v_i, v_j) into `orbit`; return the two new face orbits.
-function _insert_chord!(h::DartGraph, orbit::Vector{Int}, i::Int, j::Int, adjacency)
-    k = length(orbit)
-    di = orbit[i]
-    dj = orbit[j]
-    vi = tail(h, di)
-    vj = tail(h, dj)
-    forward = add_dart!(h, vi, vj, di)
-    backward = add_dart!(h, vj, vi, dj)
-    h.twin[forward] = backward
-    h.twin[backward] = forward
-    push!(adjacency[vi], vj)
-    push!(adjacency[vj], vi)
-    return _split_face(orbit, i, j, forward, backward)
-end
-
-function _split_face(orbit::Vector{Int}, i::Int, j::Int, forward::Int, backward::Int)
-    k = length(orbit)
-    first_length = mod(i - j, k)
-    second_length = mod(j - i, k)
-    first_face = Vector{Int}(undef, first_length + 1)
-    first_face[1] = forward
-    for t = 1:first_length
-        first_face[t+1] = orbit[mod1(j + t - 1, k)]
-    end
-    second_face = Vector{Int}(undef, second_length + 1)
-    for t = 1:second_length
-        second_face[t] = orbit[mod1(i + t - 1, k)]
-    end
-    second_face[end] = backward
-    return (first_face, second_face)
 end

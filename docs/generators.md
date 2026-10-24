@@ -83,15 +83,38 @@ triangulate(g) -> PlanarGraph   # or DartGraph for a DartGraph
 ```
 
 Adds edges inside faces until every face is a triangle, preserving the vertex set
-and the embedding. Chords are inserted inside the faces of the **given** rotation
-system, so the result is verified before it is returned:
+and the embedding, in `O(nv + ne)` time. No edge is added twice, so a simple graph
+stays simple, and the result is maximal planar (`3n - 6` edges) for a connected
+graph with at least three vertices. Bridges and cut vertices are handled: a face
+boundary that repeats a vertex is cut at every repeat first.
 
-- if a face is not a simple cycle and no chord can split it, or
-- if the rotation system does not describe a planar embedding in the first
-  place,
+An `ArgumentError` is raised instead of returning a graph that only looks like a
+triangulation if the rotation system does not describe a planar embedding, or if
+a component is a single edge (no chord can make its face a triangle).
 
-an `ArgumentError` is raised instead of returning a graph that only looks like a
-triangulation. For a 2-connected planar graph the result is maximal planar.
+The algorithm goes around the boundary of each face clipping ears: the chord
+between the two neighbours of a boundary position is added and that position
+leaves the boundary.
+
+- A boundary that repeats a vertex (a bridge or a cut vertex) first loses its
+  repeated occurrences. Such an occurrence can always be clipped, because the
+  vertex appears twice, so its two neighbours lie in different blocks around it
+  and are not adjacent.
+- The remaining simple cycle is clipped at every position whose neighbours `a` and
+  `c` are not adjacent yet; if they are, the next position is tried. Among four
+  consecutive vertices `a, b, c, d` the chord `ac` or `bd` is always new, because
+  two edges outside the face joining `a, c` and `b, d` would cross; so a failure
+  is followed by a success.
+- After a clip the next position is skipped, so each pass removes a constant
+  fraction of the face and the chords are spread over its vertices: the degree
+  of a vertex grows by `O(log k)` for a face of length `k`, instead of a fan's
+  `k - 3` at one vertex.
+
+The adjacency test scans the smaller of the two degrees. A test that succeeds is
+charged to the chord it adds, one that fails to the edge it finds, and the sum
+over the edges of the smaller degree is `O(n)` in a planar graph (Chiba and
+Nishizeki). So the whole triangulation is `O(nv + ne)`, with no hashing and no
+search for a free apex.
 
 ```julia
 ne(planar_cycle(4))              # 4
@@ -103,10 +126,7 @@ all(==(3), degree.(Ref(d), 1:nv(d)))   # true: 3-regular dual, Euler holds
 ```
 
 The output type follows the input: `triangulate(::PlanarGraph)` returns a
-`PlanarGraph`, `triangulate(::DartGraph)` a `DartGraph`. The separator relies on
-this: the middle band must be triangulated before its fundamental cycles are
-enumerated, and a band that cannot be triangulated is detected here rather than
-by an implicit assumption later.
+`PlanarGraph`, `triangulate(::DartGraph)` a `DartGraph`.
 
 ## Errors at a glance
 
@@ -117,4 +137,4 @@ by an implicit assumption later.
 | `planar_grid(0, 3)` | a dimension `< 1` | `ArgumentError` |
 | `planar_wheel(2)` | `rim < 3` | `ArgumentError` |
 | `random_triangulation(2)` | `n < 3` | `ArgumentError` |
-| `triangulate(g)` | face is not a simple cycle, or the embedding is not planar | `ArgumentError` |
+| `triangulate(g)` | the embedding is not planar, or a component is a single edge | `ArgumentError` |

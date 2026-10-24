@@ -103,9 +103,16 @@ end
 
 function _root_candidates(dg::DartGraph)
     far = _bfs(dg, 1).order[end]
-    sweep = _bfs(dg, far)
-    mid = _ancestor(sweep.parent, sweep.order[end], sweep.depth[sweep.order[end]] ÷ 2)
+    mid = _pseudo_center(dg, far)
     return unique(Int[1, far, mid, _bfs(dg, mid).order[end]])
+end
+
+# Midpoint of a BFS path that starts at `far`, a farthest vertex: the centroid on
+# tree-like graphs.
+function _pseudo_center(dg::DartGraph, far::Int)
+    sweep = _bfs(dg, far)
+    end_vertex = sweep.order[end]
+    return _ancestor(sweep.parent, end_vertex, sweep.depth[end_vertex] ÷ 2)
 end
 
 function _ancestor(parent::Vector{Int}, v::Int, steps::Int)
@@ -276,11 +283,17 @@ struct _Dual
     cnt::Vector{Int}
     ep::Vector{Int}
     eq::Vector{Int}
+    ef::Vector{Int}   # face of a star edge, 0 for an edge of the graph
+    ej::Vector{Int}   # corner of that face the star edge ends at
 end
 
-function _link!(dual::_Dual, t1::Int, t2::Int, p::Int, q::Int)
-    push!(dual.ep, p)
-    push!(dual.eq, q)
+# `ends = (p, q, f, j)`: the real vertices of the cycle of the new dual edge and
+# the face and corner of its star edge, `(0, 0)` for an edge of the graph.
+function _link!(dual::_Dual, t1::Int, t2::Int, ends::NTuple{4,Int})
+    push!(dual.ep, ends[1])
+    push!(dual.eq, ends[2])
+    push!(dual.ef, ends[3])
+    push!(dual.ej, ends[4])
     for (a, b) in ((t1, t2), (t2, t1))
         slot = 3 * (a - 1) + (dual.cnt[a] += 1)
         dual.nbr[slot] = b
@@ -291,7 +304,8 @@ end
 
 function _dual_tree(dg::DartGraph, tri::_Triangles, parent_dart::Vector{Int})
     nt = tri.ntri
-    dual = _Dual(zeros(Int, 3nt), zeros(Int, 3nt), zeros(Int, nt), Int[], Int[])
+    dual =
+        _Dual(zeros(Int, 3nt), zeros(Int, 3nt), zeros(Int, nt), Int[], Int[], Int[], Int[])
     in_tree = falses(ndarts(dg))
     for d in parent_dart
         d == 0 && continue
@@ -301,7 +315,7 @@ function _dual_tree(dg::DartGraph, tri::_Triangles, parent_dart::Vector{Int})
     for d = 1:ndarts(dg)
         e = dg.twin[d]
         (d < e && !in_tree[d]) || continue
-        _link!(dual, tri.dart_tri[d], tri.dart_tri[e], dg.tail[d], dg.head[d])
+        _link!(dual, tri.dart_tri[d], tri.dart_tri[e], (dg.tail[d], dg.head[d], 0, 0))
     end
     _link_stars!(dual, dg, tri)
     length(dual.ep) == nt - 1 || throw(_not_planar_error())
@@ -317,7 +331,7 @@ function _link_stars!(dual::_Dual, dg::DartGraph, tri::_Triangles)
         first_corner = dg.tail[orbit[1]]
         for j = 2:length(orbit)
             t = tri.tbase[f] + j - 1
-            _link!(dual, t - 1, t, first_corner, dg.tail[orbit[j]])
+            _link!(dual, t - 1, t, (first_corner, dg.tail[orbit[j]], f, j))
         end
     end
     return nothing

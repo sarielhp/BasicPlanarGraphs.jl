@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `cycle_separator` returns a closed walk of the input and no longer requires a
+  2-connected graph: bridges, cut vertices and large faces are accepted. Both
+  sides are at most `2/3` of the vertices for every connected input, and the time
+  is `O(n)` (a graph with one huge face used to take quadratic time in
+  `triangulate`, and the chord shortcut could throw on valid input). On a
+  triangulation the result is still the paper's simple `O(sqrt(n))` cycle, now
+  checked and backed by an exact fallback; on other graphs the exact balanced
+  walk of the virtual star triangulation is lifted by replacing the star edge
+  with a face-boundary arc.
+- `cycle_sides` accepts closed walks that repeat vertices and edges (by winding
+  numbers) and rejects walks that cross themselves.
+- The dual spanning tree of the paper's first phase is built without union-find.
+
+- `triangulate` is `O(n + m)` in the worst case. It used to search each face for a
+  fan apex whose chords were all free, which took quadratic time on a face whose
+  vertices have chords elsewhere (a ladder, `K_{2,n}`), and it hashed adjacency.
+  It now goes around each face clipping ears: the chord between the neighbours of
+  a position is added unless they are adjacent, and then the next position is
+  tried (among four consecutive vertices one of the two chords is always new, by
+  planarity); repeated occurrences of a cut vertex are clipped the same way. After
+  a clip the next position is skipped, so a face's chords are spread over its
+  vertices (degree `O(log k)` per vertex for a face of length `k`) instead of
+  fanning from one. No edge is added twice, and the same `ArgumentError`s are
+  raised for a non-planar rotation system or a single-edge component.
+
+### Removed
+
+- The chord shortcut of `cycle_separator` and the internal
+  `_triangulate_with_regions`.
+
 ## [0.2.2] - 2026-10-24
 
 ### Added

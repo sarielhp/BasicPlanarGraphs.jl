@@ -4,6 +4,8 @@ using BasicPlanarGraphs
 using Random
 using Test
 
+include("helpers.jl")
+
 @testset "BasicPlanarGraphs" begin
     include("embedding_test.jl")
     include("triangulate_test.jl")

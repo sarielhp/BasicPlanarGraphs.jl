@@ -40,7 +40,7 @@ its generators.
 | File | Covers |
 |---|---|
 | `embedding_test.jl` | construction and validation, cyclic-order equality, faces and `nfaces`, bridges and cut vertices, `dual`, Euler's formula, `Int32` element types |
-| `triangulate_test.jl` | chord insertion, maximal-planarity counts, rejection of non-2-connected and non-planar inputs |
+| `triangulate_test.jl` | chord insertion, maximal-planarity counts, bridges and cut vertices, faces whose vertices are adjacent elsewhere, properties on sparse random graphs, rejection of non-planar inputs |
 | `generators_test.jl` | vertex and edge counts, degrees, face counts, determinism under a seed |
 | `separator_test.jl` | validity, balance and size on structured, random, sparse and disconnected graphs, `balance` handling, determinism |
 | `separator_partition_test.jl` | the seven guarantees on structured, random, sparse, disconnected and isolated-vertex graphs, threshold extremes, determinism and immutability, the induced-graph option |

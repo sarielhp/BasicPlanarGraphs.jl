@@ -9,33 +9,32 @@
 #   2. nested level cycles `C_0, C_1, ...` around the BFS root (Section 3.2);
 #   3. a short cycle from a small ladder of those cycles (Section 3.3).
 #
-# The paper works on a triangulated graph. This implementation triangulates the
-# input internally and then *shortcuts* the chords of the resulting cycle: every
-# maximal run of fill edges is replaced by the part of the boundary of the face
-# of the input graph that contains it. The shortcut is neither in the paper nor
-# in OGDF's `SeparatorHarPeled` (which returns only a vertex set); it is what
-# makes the returned vector a cycle of the caller's graph.
+# The paper works on a triangulation, and phases 2 and 3 give its `O(sqrt(n))`
+# bound there. For any other connected graph the cycle comes from the virtual
+# star triangulation of separator.jl and is lifted to a closed walk of the
+# input (cycle_walk.jl); it is balanced, but its length is not bounded. In both
+# cases the result is checked, and the exact balanced walk is the fallback, so
+# the balance guarantee never depends on the heuristics of phases 2 and 3.
 
 # --- public interface ----------------------------------------------------
 
 """
     cycle_separator(g) -> Vector{Int}
 
-A balanced cycle separator of the connected, 2-connected embedded planar graph
-`g`, computed by the algorithm of S. Har-Peled and A. Nayyeri (*A Simple
-Algorithm for Computing a Cycle Separator*, 2019). The separator phases and the
-shortcut are linear in the size of the internal triangulation.
+A balanced cycle separator of the connected embedded planar graph `g`, in
+`O(nv(g))` time.
 
-The result is a simple cycle of `g`, listed in traversal order: consecutive
-vertices, including the last and the first, are adjacent in `g`, and no vertex
-is repeated. Removing the cycle splits `g` into the vertices on its two sides;
-use [`cycle_sides`](@ref) to obtain them. The cycle is oriented so that the
-left side, which [`cycle_sides`](@ref) calls the inside, is the smaller of the
-two sides.
+The result is a closed walk of `g`: at least three vertices, and consecutive
+entries, including the last and the first, are adjacent in `g`. Removing its
+vertices leaves two sides, and use [`cycle_sides`](@ref) to obtain them: no edge
+joins them, and each has at most `2/3` of the vertices. The walk is oriented so
+that the side `cycle_sides` calls the inside is the smaller one.
 
-Both sides have at most `2/3` of the vertices, and the cycle has `O(sqrt(n))`
-vertices in the triangulation used internally. On graphs whose faces are already
-triangles no shortcut is needed and that bound applies to the returned cycle.
+If every face of `g` is a triangle the walk is a simple cycle with `O(sqrt(n))`
+vertices (S. Har-Peled and A. Nayyeri, 2019). For other graphs the walk may
+repeat vertices and edges (a fill edge of a triangulation becomes a path along
+the face boundary) and its length is not bounded; both sides are still at most
+`2/3` of the vertices.
 
 ```julia
 g = planar_grid(20, 20)
@@ -45,8 +44,7 @@ isempty(intersect(inside, outside))              # true
 max(length(inside), length(outside)) <= 2 / 3 * nv(g)
 ```
 
-The graph must be connected and 2-connected (so every face is a simple cycle,
-which is what [`triangulate`](@ref) needs), with at least three vertices.
+The graph must be connected and have at least three vertices.
 """
 function cycle_separator(g::PlanarGraph)
     dg = DartGraph(g)
@@ -54,44 +52,23 @@ function cycle_separator(g::PlanarGraph)
         throw(ArgumentError("a cycle separator needs at least 3 vertices, got $(dg.n)"))
     count_components(dg) == 1 ||
         throw(ArgumentError("cycle_separator requires a connected graph"))
-    _faces_are_simple_cycles(dg) || throw(
-        ArgumentError(
-            "cycle_separator requires a 2-connected graph: a face boundary " *
-            "repeats a vertex, so the graph has a bridge or a cut vertex",
-        ),
-    )
     return _cycle_separator(dg)
-end
-
-# A connected plane graph is 2-connected exactly when every face boundary is a
-# simple cycle; a bridge or a cut vertex makes some boundary walk repeat a
-# vertex. `triangulate` does not reject every such graph, so check it here.
-function _faces_are_simple_cycles(g::DartGraph)
-    orbits, _ = face_orbits(g)
-    stamp = zeros(Int, g.n)
-    for (f, orbit) in enumerate(orbits)
-        for d in orbit
-            v = g.tail[d]
-            stamp[v] == f && return false
-            stamp[v] = f
-        end
-    end
-    return true
 end
 
 """
     cycle_sides(g, cycle) -> (inside, outside)
 
-Split the vertices of the connected graph `g` by the simple cycle `cycle` and
-return the two sides. The cycle is read in the order given: because rotations
+Split the vertices of the connected graph `g` by the closed walk `cycle` and
+return the two sides. The walk is read in the order given: because rotations
 are counter-clockwise, the vertices locally to the **left** of the traversal
-are `inside` and those to the right are `outside`. Reversing the cycle swaps the
+are `inside` and those to the right are `outside`. Reversing the walk swaps the
 two results; neither side is privileged beyond this convention.
 
-`cycle` must be a sequence of at least three distinct vertices of `g` whose
-consecutive entries, including the last and the first, are adjacent; otherwise
-an `ArgumentError` is raised. Vertices of the cycle itself are in neither
-result, and both vectors are sorted ascending.
+`cycle` must be a sequence of at least three vertices of `g` whose consecutive
+entries, including the last and the first, are adjacent, and which may repeat
+vertices and edges (as the result of [`cycle_separator`](@ref) may); otherwise,
+or when the walk crosses itself, an `ArgumentError` is raised. Vertices of the
+walk itself are in neither result, and both vectors are sorted ascending.
 
 ```julia
 g = planar_wheel(10)
@@ -108,30 +85,28 @@ function cycle_sides(g::PlanarGraph, cycle::AbstractVector{<:Integer})
     _check_cycle(dg, cyc)
     orbits, face_of = face_orbits(dg)
     sides = _cycle_sides(dg, orbits, face_of, cyc)
-    sides === nothing && throw(ArgumentError("the given vertices do not form a cycle"))
+    sides === nothing && throw(
+        ArgumentError(
+            "the given vertices do not form a closed walk that keeps to one side of itself",
+        ),
+    )
     return sides
 end
 
 # --- the pipeline ---------------------------------------------------------
 
 function _cycle_separator(g::DartGraph; delta::Union{Nothing,Int} = nothing)
-    h, region = _triangulate_with_regions(g)
-    step = delta === nothing ? max(1, ceil(Int, sqrt(h.n / 2))) : delta
-    step >= 1 || throw(ArgumentError("delta must be positive, got $step"))
-    result = _cycle_in_triangulation(h, step)
-    g_orbits, g_face_of = face_orbits(g)
-    for candidate in (result.cycle, result.fundamental)
-        cyc = _shortcut_cycle(g, h, region, candidate)
-        cyc === nothing || return _orient_cycle(g, g_orbits, g_face_of, cyc)
+    orbits, face_of = face_orbits(g)
+    if all(orbit -> length(orbit) == 3, orbits)
+        step = delta === nothing ? max(1, ceil(Int, sqrt(g.n / 2))) : delta
+        step >= 1 || throw(ArgumentError("delta must be positive, got $step"))
+        result = _cycle_in_triangulation(g, step)
+        for candidate in (result.cycle, result.fundamental)
+            _is_balanced_walk(g, orbits, face_of, candidate) &&
+                return _orient_cycle(g, orbits, face_of, candidate)
+        end
     end
-    for candidate in (result.cycle, result.fundamental)
-        cyc = _local_shortcut(g, h, region, candidate, g_orbits)
-        cyc === nothing || return _orient_cycle(g, g_orbits, g_face_of, cyc)
-    end
-    error(
-        "cycle separator: the cycle of the triangulation could not be reduced " *
-        "to a cycle of the input graph",
-    )
+    return _orient_cycle(g, orbits, face_of, _balanced_walk(g))
 end
 
 # --- phase 1: a possibly long cycle separator ----------------------------
@@ -161,25 +136,22 @@ function _tree_edges(h::DartGraph, parent_dart::Vector{Int})
 end
 
 # The dual of the non-tree edges is a spanning tree when the embedding is
-# planar. Returns its parent pointers and a BFS order over the faces.
+# planar, so no union-find is needed. Returns its parent pointers and a BFS
+# order over the faces.
 function _dual_spanning_tree(h::DartGraph, tree::BitVector)
     orbits, face_of = face_orbits(h)
     nf = length(orbits)
-    dsu = collect(1:nf)
     adj = [Tuple{Int,Int}[] for _ = 1:nf]
+    edges = 0
     for d = 1:ndarts(h)
-        d < h.twin[d] || continue
-        tree[d] && continue
+        (d < h.twin[d] && !tree[d]) || continue
         f1 = face_of[d]
         f2 = face_of[h.twin[d]]
-        f1 == f2 && continue
-        a = _find_root!(dsu, f1)
-        b = _find_root!(dsu, f2)
-        a == b && continue
-        dsu[a] = b
         push!(adj[f1], (f2, d))
         push!(adj[f2], (f1, d))
+        edges += 1
     end
+    edges == nf - 1 || throw(_not_planar_error())
 
     face_parent = zeros(Int, nf)
     face_dart = zeros(Int, nf)
@@ -223,14 +195,6 @@ function _balanced_dual_dart(
     end
     best == 0 && throw(_not_planar_error())
     return best
-end
-
-function _find_root!(dsu::Vector{Int}, x::Int)
-    while dsu[x] != x
-        dsu[x] = dsu[dsu[x]]
-        x = dsu[x]
-    end
-    return x
 end
 
 _not_planar_error() = ArgumentError(
