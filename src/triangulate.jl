@@ -32,17 +32,17 @@ function _add_chords!(h::DartGraph, region::Union{Nothing,Vector{Int}} = nothing
         push!(adjacency[tail(h, d)], h.head[d])
     end
     # Every simple face is triangulated in one pass: its whole fan of chords is
-    # computed from the original boundary and inserted directly. Faces that are
-    # not simple cycles keep the old one-chord-at-a-time path.
-    pending = Vector{Vector{Int}}()
-    for orbit in orbits
-        length(orbit) <= 3 && continue
-        _fan_triangulate!(h, orbit, adjacency, region) && continue
-        push!(pending, orbit)
-    end
+    # computed from the original boundary and inserted directly. A face whose
+    # boundary repeats a vertex is first cut at the second appearance of that
+    # vertex, so the remaining face becomes simple and can use a fan too.
+    pending = orbits
     while !isempty(pending)
         orbit = pop!(pending)
         length(orbit) <= 3 && continue
+        _fan_triangulate!(h, orbit, adjacency, region) && continue
+        orbit = _peel_repeats!(h, orbit, adjacency, region)
+        length(orbit) <= 3 && continue
+        _fan_triangulate!(h, orbit, adjacency, region) && continue
         chord = _find_chord(orbit, h, adjacency)
         chord === nothing && continue
         faces_added = _insert_chord!(h, orbit, chord[1], chord[2], adjacency)
@@ -57,6 +57,69 @@ function _add_chords!(h::DartGraph, region::Union{Nothing,Vector{Int}} = nothing
         push!(pending, faces_added[2])
     end
     return h
+end
+
+# Cut off the triangle at every second appearance of a repeated boundary
+# vertex: connect the vertex before that appearance to the vertex after it.
+# The boundary is kept as a linked list so the whole sweep is linear; the
+# chord is skipped when it already exists (a parallel edge would result) or
+# when both neighbours are the same vertex. Return the remaining boundary walk.
+function _peel_repeats!(
+    h::DartGraph,
+    orbit::Vector{Int},
+    adjacency,
+    region::Union{Nothing,Vector{Int}},
+)
+    k = length(orbit)
+    verts = [tail(h, d) for d in orbit]
+    prevp = [mod1(t - 1, k) for t = 1:k]
+    nextp = [mod1(t + 1, k) for t = 1:k]
+    dartp = copy(orbit)
+    repeats = falses(k)
+    seen = Set{Int}()
+    for t = 1:k
+        if verts[t] in seen
+            repeats[t] = true
+        else
+            push!(seen, verts[t])
+        end
+    end
+    r = region === nothing ? 0 : region[orbit[1]]
+    removed = falses(k)
+    changed = false
+    for t = 1:k
+        repeats[t] || continue
+        b = prevp[t]
+        c = nextp[t]
+        vb = verts[b]
+        vc = verts[c]
+        (vb == vc || vc in adjacency[vb]) && continue
+        forward = add_dart!(h, vb, vc, dartp[b])
+        backward = add_dart!(h, vc, vb, dartp[c])
+        h.twin[forward] = backward
+        h.twin[backward] = forward
+        push!(adjacency[vb], vc)
+        push!(adjacency[vc], vb)
+        if region !== nothing
+            push!(region, r)
+            push!(region, r)
+        end
+        nextp[b] = c
+        prevp[c] = b
+        dartp[b] = forward
+        removed[t] = true
+        changed = true
+    end
+    changed || return orbit
+    start = findfirst(!, removed)
+    out = Int[]
+    t = start
+    while true
+        push!(out, dartp[t])
+        t = nextp[t]
+        t == start && break
+    end
+    return out
 end
 
 # True when the vertices of the face walk `orbit` are pairwise distinct, i.e.

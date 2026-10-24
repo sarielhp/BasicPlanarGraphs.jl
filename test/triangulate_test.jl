@@ -29,11 +29,27 @@ end
     end
 
     @testset "graphs with bridges" begin
-        # A path can still be triangulated: its faces are simple cycles.
+        # A path's single face walk repeats every internal vertex; each repeat
+        # is cut at its second appearance and the rest becomes a simple cycle.
         path = triangulate(planar_path(6))
         @test ne(path) == 3 * 6 - 6
         @test all_faces_triangular(path)
         @test is_planar_embedding(path)
+
+        for n in (4, 5, 7, 12)
+            p = triangulate(planar_path(n))
+            @test ne(p) == 3n - 6
+            @test all_faces_triangular(p)
+            @test is_planar_embedding(p)
+        end
+
+        # Two triangles sharing a cut vertex: the shared vertex repeats on the
+        # only non-triangular face, so it is peeled before that face is fanned.
+        bowtie = PlanarGraph([[2, 3, 4, 5], [1, 3], [1, 2], [1, 5], [1, 4]])
+        t = triangulate(bowtie)
+        @test ne(t) == 3 * 5 - 6
+        @test all_faces_triangular(t)
+        @test is_planar_embedding(t)
 
         # Bridges are fine: the faces are still simple cycles.
         two_k4 = [

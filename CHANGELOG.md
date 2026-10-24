@@ -72,8 +72,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   quadratic (5.5 s and 18.7 GiB of allocation for a 50,000-vertex cycle). The
   chord insertion is 2-4x faster than the balanced split it replaces (57 ms to
   25 ms for that cycle), so `triangulate` takes about 0.09 s and
-  `cycle_separator` drops from 5.6 s to about 0.11 s on the same input. Faces
-  that are not simple cycles keep the one-chord-at-a-time path.
+  `cycle_separator` drops from 5.6 s to about 0.11 s on the same input. A face
+  whose boundary repeats a vertex is cut at the second appearance of that
+  vertex (connecting the previous and next boundary vertices) before the fan is
+  inserted. A fan chord or a repeat chord that already exists is never added:
+  the next free apex or another chord is used instead, so no parallel edge can
+  appear.
 
 ### Changed
 
