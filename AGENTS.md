@@ -26,6 +26,11 @@ bit-identical results afterwards; a result change is its own deliberate commit.
 
 ## Package notes
 
+- Public repository: <https://github.com/sarielhp/BasicPlanarGraphs.jl>, MIT licensed,
+  default branch `main`. CI (`.github/workflows/ci.yml`) runs `Pkg.test()` via
+  `julia-actions/julia-runtest` on Julia 1.10 and the latest release, Linux x64, macOS
+  aarch64 and Windows x64; build and test locally before pushing. `Manifest.toml` is
+  git-ignored (it is a package, not an application), so a fresh clone resolves its own.
 - `src/embedded.jl` holds the dart-based rotation-system core (`DartGraph`); the public
   `PlanarGraph` in `src/planar_graph.jl` wraps a `Graphs.jl` `SimpleGraph` plus rotations.
 - The separator (`src/separator.jl`) follows Lipton–Tarjan: BFS levels on the input graph,

@@ -1,8 +1,23 @@
 # BasicPlanarGraphs
 
+[![CI](https://github.com/sarielhp/BasicPlanarGraphs.jl/actions/workflows/ci.yml/badge.svg)](https://github.com/sarielhp/BasicPlanarGraphs.jl/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Planar graphs with an abstract embedding (a rotation system), and a linear-time
 planar separator based on Lipton and Tarjan, *A Separator Theorem for Planar
 Graphs* (SIAM J. Appl. Math. 36(2), 1979).
+
+## Installation
+
+Requires Julia 1.10 or later. The package is not registered yet, so install it
+from the repository:
+
+```julia
+using Pkg
+Pkg.add(url = "https://github.com/sarielhp/BasicPlanarGraphs.jl")
+```
+
+## Usage
 
 ```julia
 using Graphs, BasicPlanarGraphs
@@ -86,8 +101,16 @@ julia-audit --strict --include-tests
 julia-static-analysis
 ```
 
+These commands and the audit tooling are described in [AGENTS.md](AGENTS.md).
+CI runs `Pkg.test()` on Julia 1.10 and the latest release for Linux (x64),
+macOS (aarch64) and Windows (x64).
+
 The test suite covers the embedding layer (rotations, faces, dual, Euler),
 triangulation, the generators, and the separator: validity and balance on
 structured, random, sparse, and disconnected graphs, the size bound, a
 brute-force optimal separator as an oracle on small graphs, and a generous
 linear-scaling timing test. `Aqua.test_all` runs as part of `Pkg.test()`.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
