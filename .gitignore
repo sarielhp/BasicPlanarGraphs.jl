@@ -1,0 +1,31 @@
+# Julia: package environment
+# Manifest.toml is machine-specific; it is not committed for packages.
+Manifest.toml
+
+# Julia: build artifacts and precompilation
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+/build/
+/deps/build.log
+/deps/deps.jl
+/docs/build/
+
+# Julia: local scratch
+/scratch/
+/tmp/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*~
+*.sublime-workspace
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Logs and profiles
+*.log
+*.prof
