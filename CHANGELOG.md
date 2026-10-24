@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-24
+
 ### Changed
 
 - Internal ordering no longer uses comparison sorts. The Left-Right test orders
@@ -123,5 +125,6 @@ First release.
 - `Graphs` compatibility raised to `1.15`, the first release with
   `Graphs.is_planar`.
 
-[Unreleased]: https://github.com/sarielhp/BasicPlanarGraphs.jl/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/sarielhp/BasicPlanarGraphs.jl/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/sarielhp/BasicPlanarGraphs.jl/releases/tag/v0.1.1
 [0.1.0]: https://github.com/sarielhp/BasicPlanarGraphs.jl/releases/tag/v0.1.0
