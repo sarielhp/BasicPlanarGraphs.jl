@@ -8,7 +8,7 @@ review-cycle contract in `~/prog/standards/workflow`; the settings live in
 
 ```bash
 tools/build            # instantiate the environment and load the package
-tools/gate             # audit, static analysis, tests (with Aqua), build (~35 s)
+tools/gate             # audit, static analysis, examples, tests (with Aqua), build (~45 s)
 tools/gate --full      # .. plus a standalone Aqua run
 tools/gate --no-build  # .. without the build step
 ```
@@ -17,8 +17,9 @@ tools/gate --no-build  # .. without the build step
 
 | Step | Command | What it checks |
 |---|---|---|
-| audit | `julia-audit --strict --include-tests` | nesting ≤ 4, cognitive complexity ≤ 15, method tiers (80 / 120 lines), file size, argument count, idiom and trap rules |
-| static analysis | `julia-static-analysis` | every file parses, JuliaFormatter would change nothing, JET type inference, ExplicitImports |
+| audit | `julia-audit --strict --include-tests src test examples` | nesting ≤ 4, cognitive complexity ≤ 15, method tiers (80 / 120 lines), file size, argument count, idiom and trap rules |
+| static analysis | `julia-static-analysis src test examples` | every file parses, JuliaFormatter would change nothing, JET type inference, ExplicitImports |
+| examples | `examples/test_planarity.jl --graph … --sizes 10,all` | the planarity example runs end to end on a 13-vertex wheel written by the gate: read, planarity test, embedding, output, separator, verification |
 | tests | `Pkg.test()` | the suite below, including `Aqua.test_all` |
 | build | `tools/build` | the package still loads |
 
@@ -47,6 +48,10 @@ its generators.
 | `graph_io_test.jl` | round trips for embedded and bare graphs, the file format, isolated vertices and empty graphs, every rejected input |
 | `scaling_test.jl` | quadrupling `n` does not blow up the running time (generous factor for loaded machines) |
 
+`examples/` is part of the checked code: the audit and the format check cover it,
+and `tools/gate` runs `examples/test_planarity.jl` on a 13-vertex wheel that the
+gate writes itself, so a broken example fails the gate without any network access.
+
 Two properties make the separator tests meaningful rather than circular:
 
 - **Independent validation.** `check_separator` re-derives the partition check
@@ -60,6 +65,39 @@ Two properties make the separator tests meaningful rather than circular:
 The scaling test compares `separator` on a `60 x 60` and a `120 x 120` grid and
 on random triangulations of 2000 and 8000 vertices, allowing a factor of 30 for a
 4× size increase.
+
+## The planarity example
+
+`examples/test_planarity.jl` is the end-to-end demo on real data: it downloads a
+SNAP road network (TIGER/Line Pennsylvania, ~1.09M vertices), cleans the directed
+listing into a pure undirected graph, then for 1000, 10,000, 100,000 induced
+vertices and the whole graph tests planarity, computes and writes an embedding,
+runs the separator and verifies it, printing the time and memory of every stage.
+Generated files are cached under `/tmp/<user>/BasicPlanarGraphs/`.
+
+```bash
+julia --project=. examples/test_planarity.jl                 # the four sizes
+julia --project=. examples/test_planarity.jl --sizes 1000,10000
+julia --project=. examples/test_planarity.jl --dataset roadNet-TX
+julia --project=. examples/test_planarity.jl --graph my.graph.txt   # offline
+```
+
+It never runs in CI (network download, several GiB at the full size); the gate
+only runs the small `--graph` smoke test.
+
+On an otherwise idle machine (58 GB RAM) the four sizes give:
+
+| vertices | n | m | planar | check | embed | write | separator | \|C\| | balance |
+|---|---|---|---|---|---|---|---|---|---|
+| first 1000 | 1000 | 1276 | true | 0.00 s | 0.04 s | 0.00 s | 0.00 s | 0 | 50.6 % |
+| first 10000 | 10000 | 14209 | true | 0.04 s | 0.05 s | 0.01 s | 0.11 s | 197 | 56.3 % |
+| first 100000 | 100000 | 143993 | true | 0.53 s | 0.59 s | 0.13 s | 2.20 s | 2726 | 57.6 % |
+| all | 1088092 | 1541898 | true | 8.42 s | 8.47 s | 1.16 s | 20.22 s | 2292 | 49.9 % |
+
+Every separator is verified by the program itself (the three parts partition
+`1:n`, no edge joins `A` and `B`, and each side is within `2/3 n`), and every
+written embedding satisfies Euler's formula on every component. Peak resident
+memory for the whole run is about 4 GiB.
 
 ## CI
 

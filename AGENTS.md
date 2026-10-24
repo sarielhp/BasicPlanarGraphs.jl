@@ -53,7 +53,7 @@ The project follows the review-cycle contract in
 | Command | Behavior |
 |---|---|
 | `tools/build` | Instantiate the environment and load the package. No tests, no linters, no installs. |
-| `tools/gate` | Fast gate: `julia-audit --strict --include-tests`, `julia-static-analysis`, `Pkg.test()` (with Aqua), then one `tools/build`. `--full` adds a standalone Aqua run; `--no-build` skips the build. |
+| `tools/gate` | Fast gate: `julia-audit --strict --include-tests src test examples`, `julia-static-analysis src test examples`, the `examples/test_planarity.jl` smoke run (offline, on a 13-vertex wheel), `Pkg.test()` (with Aqua), then one `tools/build`. `--full` adds a standalone Aqua run; `--no-build` skips the build. |
 | `tools/check` | Compatibility alias for `tools/gate` (a symlink). |
 | `tools/push` | `git push` and return; reports the run URL, never waits. |
 | `tools/check_ci` | Verdict of the latest Actions run: exit `0` green, `1` failed, `2` pending, `3` unknown. |
@@ -87,6 +87,18 @@ Command approval permits execution, not unrelated work. Reuse session authorizat
 sandboxing and manual approval review enabled; never enlarge writable roots, modify
 approval rules, install dependencies, or publish merely because these instructions are
 present.
+
+## Examples
+
+`examples/` is held to the same standards as `src` and `test`: it is audited and
+format-checked, and `tools/gate` executes `examples/test_planarity.jl` on a small
+local graph, so a broken example fails the gate. The example never runs in CI
+against the real dataset (1M vertices, network download); run it by hand:
+
+```bash
+julia --project=. examples/test_planarity.jl            # 1000, 10000, 100000, all
+julia --project=. examples/test_planarity.jl --help
+```
 
 ## Package notes
 
