@@ -31,6 +31,10 @@ bit-identical results afterwards; a result change is its own deliberate commit.
   `julia-actions/julia-runtest` on Julia 1.10 and the latest release, Linux x64, macOS
   aarch64 and Windows x64; build and test locally before pushing. `Manifest.toml` is
   git-ignored (it is a package, not an application), so a fresh clone resolves its own.
+- CI must not generate or release binaries. The workflow only builds the package
+  in-place to run the tests: no compiled/binary artifacts, no `Pkg.build` outputs or
+  uploaded build products, no GitHub releases, tags, or uploads to a package registry.
+  This package is pure Julia and has no native code to compile.
 - `src/embedded.jl` holds the dart-based rotation-system core (`DartGraph`); the public
   `PlanarGraph` in `src/planar_graph.jl` wraps a `Graphs.jl` `SimpleGraph` plus rotations.
 - The separator (`src/separator.jl`) follows Lipton–Tarjan: BFS levels on the input graph,
