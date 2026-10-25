@@ -148,4 +148,54 @@ end
             @test maximum(degree(t, v) - degree(g, v) for v = 1:nv(g)) <= 6
         end
     end
+
+    @testset "faces with hubs and repeated vertices" begin
+        hubs(n) = begin
+            xs = collect(3:(n+2))
+            PlanarGraph(
+                vcat([vcat(xs, [2])], [vcat(reverse(xs), [1])], [[1, 2] for _ = 1:n]),
+            )
+        end
+        # Two adjacent hubs joined by many paths: the same edge is asked about on
+        # every face, which a scan of the smaller degree answered in quadratic time.
+        for n in (10, 50)
+            t = triangulate(hubs(n))
+            @test ne(t) == 3nv(t) - 6
+            @test all_faces_triangular(t)
+        end
+        @test fastest(triangulate, hubs(64_000)) <=
+              80 * fastest(triangulate, hubs(4_000)) + 0.05
+
+        # A vertex repeated many times on one face (star, spider, caterpillar):
+        # a constant number of chords per occurrence, never a fan.
+        star(k) = PlanarGraph(vcat([collect(2:k)], [[1] for _ = 2:k]))
+        spider(legs, len) = begin
+            rot = [Int[] for _ = 1:(1+legs*len)]
+            for l = 1:legs, i = 1:len
+                v = 1 + (l - 1) * len + i
+                prev = i == 1 ? 1 : v - 1
+                push!(rot[prev], v)
+                push!(rot[v], prev)
+            end
+            PlanarGraph(rot)
+        end
+        for g in (star(500), spider(20, 25), planar_path(500))
+            t = triangulate(g)
+            @test ne(t) == 3nv(g) - 6
+            @test all_faces_triangular(t)
+            hub = argmax(v -> degree(g, v), 1:nv(g))
+            @test degree(t, hub) - degree(g, hub) <= 2degree(g, hub)
+            @test maximum(degree(t, v) - degree(g, v) for v = 1:nv(g)) <=
+                  12 + 2maximum(degree(g, v) for v = 1:nv(g))
+        end
+
+        # Components are triangulated separately; isolated vertices stay.
+        t = triangulate(
+            disjoint_union(planar_cycle(5), PlanarGraph([Int[]]), planar_cycle(4)),
+        )
+        @test ne(t) == (3 * 5 - 6) + (3 * 4 - 6)
+        @test degree(t, 6) == 0
+        @test_throws ArgumentError triangulate(PlanarGraph([[2], [1]]))
+        @test_throws ArgumentError triangulate(PlanarGraph([[2], [1], Int[]]))
+    end
 end

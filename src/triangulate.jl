@@ -15,20 +15,24 @@
 # region. All rungs of such a region are edges outside the face, and each rung of
 # a ladder started one position later (a slanted ladder) crosses one of them, so
 # none is blocked: the slanted ladder cuts the region into quadrangles, and a
-# vertex gains at most 5 chords per face (3 unless it ends a first-ladder rung).
+# vertex gains at most 5 chords from a face whose boundary is a simple cycle (3
+# unless it ends a first-ladder rung); the peeling of repeated vertices before it
+# can give a vertex a few more (9 was the most seen), and every bound is a constant.
 # On an input that is not a planar embedding a quadrangle can have both diagonals
 # blocked, and the triangulation is rejected.
 #
-# The adjacency test scans the smaller of the two degrees. A test that succeeds
-# is charged to the chord it adds, one that fails to the edge it finds, and the
-# sum over the edges of the smaller degree is `O(n)` in a planar graph (Chiba and
-# Nishizeki), so the whole triangulation is `O(n + m)`, with no hashing, and never
-# adds an edge that is already there.
+#
+# The edges are kept in a hash set, so an adjacency test is `O(1)` in expectation
+# and no edge is added twice. A scan of the smaller degree would be quadratic: two
+# adjacent hubs joined by many paths are opposite on every face, so the same edge
+# would be found, and charged, once per face. With the set, every test is `O(1)`
+# and there are `O(n + m)` of them, so the whole triangulation is `O(n + m)`
+# expected time.
 """
     triangulate(g) -> same type as g
 
 Add edges to `g` until every face is a triangle, preserving the embedding and
-the vertex set, in `O(nv + ne)` time. No edge is added twice, so a simple graph
+the vertex set, in `O(nv + ne)` expected time. No edge is added twice, so a simple graph
 stays simple, and the new edges are spread over the vertices of a face instead of
 fanning from one of them. The result is a maximal planar graph when `g` is
 connected with at least three vertices.
@@ -57,14 +61,33 @@ function _add_chords!(h::DartGraph)
     )
     orbits, _ = face_orbits(h)
     occurrences = zeros(Int, h.n)
+    b = _Builder(h)
     for orbit in orbits
         length(orbit) <= 3 && continue
-        orbit = _peel_repeats!(h, orbit, occurrences)
+        orbit = _peel_repeats!(b, orbit, occurrences)
         length(orbit) <= 3 && continue
-        _ladder!(h, orbit)
+        _ladder!(b, orbit)
     end
     return h
 end
+
+# The embedded graph under construction and the set of its edges, with every
+# chord added so far, so that no chord repeats an edge.
+struct _Builder
+    graph::DartGraph
+    edges::Set{Int}
+end
+
+function _Builder(h::DartGraph)
+    edges = Set{Int}()
+    sizehint!(edges, 3 * h.n)
+    for d = 1:ndarts(h)
+        h.tail[d] < h.head[d] && push!(edges, _edge_key(h.n, h.tail[d], h.head[d]))
+    end
+    return _Builder(h, edges)
+end
+
+_edge_key(n::Int, u::Int, w::Int) = min(u, w) * (n + 1) + max(u, w)
 
 # --- faces that repeat a vertex ------------------------------------------
 
@@ -72,15 +95,15 @@ end
 # around the list of those occurrences and skipping the one next to a clip.
 # `occurrences[v]` counts the occurrences of `v` that are left; it is all zero
 # again on return. Return the remaining boundary walk, which is a simple cycle.
-function _peel_repeats!(h::DartGraph, orbit::Vector{Int}, occurrences::Vector{Int})
-    verts = Int[tail(h, d) for d in orbit]
+function _peel_repeats!(b::_Builder, orbit::Vector{Int}, occurrences::Vector{Int})
+    verts = Int[tail(b.graph, d) for d in orbit]
     for v in verts
         occurrences[v] += 1
     end
     candidates = findall(t -> occurrences[verts[t]] >= 2, eachindex(verts))
     result =
         isempty(candidates) ? orbit :
-        _clip_repeats!(h, orbit, verts, occurrences, candidates)
+        _clip_repeats!(b, orbit, verts, occurrences, candidates)
     for v in verts
         occurrences[v] = 0
     end
@@ -88,7 +111,7 @@ function _peel_repeats!(h::DartGraph, orbit::Vector{Int}, occurrences::Vector{In
 end
 
 function _clip_repeats!(
-    h::DartGraph,
+    builder::_Builder,
     orbit::Vector{Int},
     verts::Vector{Int},
     occurrences::Vector{Int},
@@ -109,7 +132,7 @@ function _clip_repeats!(
         b = prevp[t]
         c = nextp[t]
         verts[b] == verts[c] && throw(_not_triangulable())
-        dartp[b] = _add_chord!(h, verts[b], verts[c], dartp[b], dartp[c])
+        dartp[b] = _add_chord!(builder, verts[b], verts[c], dartp[b], dartp[c])
         nextp[b] = c
         prevp[c] = b
         removed[t] = true
@@ -162,11 +185,13 @@ _not_triangulable() =
 # Insert the chord `u v` inside a face: the new dart at `u` goes after `du`, the
 # dart leaving `u` along the face, and the one at `v` after `dv`. Returns the
 # dart `u -> v`.
-function _add_chord!(h::DartGraph, u::Int, v::Int, du::Int, dv::Int)
+function _add_chord!(b::_Builder, u::Int, v::Int, du::Int, dv::Int)
+    h = b.graph
     forward = add_dart!(h, u, v, du)
     backward = add_dart!(h, v, u, dv)
     h.twin[forward] = backward
     h.twin[backward] = forward
+    push!(b.edges, _edge_key(h.n, u, v))
     return forward
 end
 
@@ -186,25 +211,25 @@ end
 # of at least five vertices has all its rungs blocked by edges outside the face; a
 # ladder started one position later pairs the vertices at a slant, which those
 # edges do not block, so a slanted ladder leaves only quadrangles and a triangle.
-function _ladder!(h::DartGraph, orbit::Vector{Int}, slanted::Bool = false)
-    for region in _regions(orbit, _add_rungs!(h, orbit))
-        _close_region!(h, region, slanted)
+function _ladder!(b::_Builder, orbit::Vector{Int}, slanted::Bool = false)
+    for region in _regions(orbit, _add_rungs!(b, orbit))
+        _close_region!(b, region, slanted)
     end
     return nothing
 end
 
 # Join the positions `i + 1` and `k - i` for `i = 1, 2, …` whenever the two
 # vertices are not adjacent yet. The base rung comes first.
-function _add_rungs!(h::DartGraph, orbit::Vector{Int})
+function _add_rungs!(b::_Builder, orbit::Vector{Int})
     k = length(orbit)
-    verts = Int[tail(h, d) for d in orbit]
+    verts = Int[tail(b.graph, d) for d in orbit]
     rungs = [_Rung(1, k, 0, orbit[k])]
     for i = 1:((k-3)÷2)
         s = i + 1
         t = k - i
-        _adjacent(h, verts[s], verts[t]) && continue
-        forward = _add_chord!(h, verts[s], verts[t], orbit[s], orbit[t])
-        push!(rungs, _Rung(s, t, forward, h.twin[forward]))
+        _adjacent(b, verts[s], verts[t]) && continue
+        forward = _add_chord!(b, verts[s], verts[t], orbit[s], orbit[t])
+        push!(rungs, _Rung(s, t, forward, b.graph.twin[forward]))
     end
     return rungs
 end
@@ -225,31 +250,28 @@ end
 
 # A triangle is done, a quadrangle takes the diagonal that is new, and a larger
 # region, left by skipped rungs, gets a slanted ladder.
-function _close_region!(h::DartGraph, region::Vector{Int}, slanted::Bool)
+function _close_region!(b::_Builder, region::Vector{Int}, slanted::Bool)
     k = length(region)
     k <= 3 && return nothing
     if k > 4
         slanted && throw(_not_triangulable())
-        return _ladder!(h, vcat(region[2:end], region[1]), true)
+        return _ladder!(b, vcat(region[2:end], region[1]), true)
     end
-    verts = Int[tail(h, d) for d in region]
+    verts = Int[tail(b.graph, d) for d in region]
     for (s, t) in ((1, 3), (2, 4))
-        _adjacent(h, verts[s], verts[t]) && continue
-        _add_chord!(h, verts[s], verts[t], region[s], region[t])
+        _adjacent(b, verts[s], verts[t]) && continue
+        _add_chord!(b, verts[s], verts[t], region[s], region[t])
         return nothing
     end
     throw(_not_triangulable())
 end
 
 
-# Adjacent vertices, found by scanning the one of smaller degree.
-function _adjacent(h::DartGraph, u::Int, w::Int)
-    h.deg[u] <= h.deg[w] || return _adjacent(h, w, u)
-    for d in incident_darts(h, u)
-        h.head[d] == w && return true
-    end
-    return false
-end
+# Adjacent vertices, by a lookup in the set of edges. The same pair is asked about
+# once per face it is opposite on, so a scan of the smaller degree would charge
+# one edge again and again (two adjacent hubs joined by many paths); the set
+# makes every test `O(1)` in expectation.
+_adjacent(b::_Builder, u::Int, w::Int) = _edge_key(b.graph.n, u, w) in b.edges
 
 # --- verification --------------------------------------------------------
 

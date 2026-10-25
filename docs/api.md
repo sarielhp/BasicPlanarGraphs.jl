@@ -115,8 +115,11 @@ underlying graph, which repairs a rotation system that came from a file.
 
 Adds chords inside faces until every face is a triangle, preserving vertices and
 embedding. Raises `ArgumentError` when a face is not a simple cycle and cannot be
-split, or when the rotation system is not planar. On a 2-connected input the
-result is maximal planar (`3n - 6` edges).
+split, when the rotation system is not planar, or when a component is a single
+edge (no chord makes its face a triangle). Every connected component with at
+least three vertices becomes maximal planar (`3n_c - 6` edges), so a connected
+input of at least three vertices gives `3n - 6` edges; isolated vertices stay
+isolated and the components are triangulated separately.
 
 ## Separator
 

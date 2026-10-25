@@ -111,17 +111,20 @@ the face, and each rung of a **slanted ladder** (started one position later, so
 the vertices are paired at a slant) crosses one of them in the sense of
 alternating ends on the boundary. By planarity it is therefore not blocked, so
 the slanted ladder cuts the region into quadrangles and a final triangle or
-quadrangle too. A vertex gains at most 5 chords per face (3 unless it ends a
-rung of the first ladder), and the bound is attained. The only edges that can
+quadrangle too. A vertex gains at most 5 chords from a face whose boundary is a
+simple cycle (3 unless it ends a rung of the first ladder), and the bound is
+attained. The peeling of repeated vertices that comes first can give a vertex a few
+more (9 was the most seen, on a leaf of a tree), always a constant. The only edges that can
 block a chord are non-crossing edges of the disk outside the face, which is all
 the argument uses. If the input is not a planar embedding, a quadrangle may have
 both diagonals blocked and an `ArgumentError` is raised.
 
-The adjacency test scans the smaller of the two degrees. A test that succeeds is
-charged to the chord it adds, one that fails to the edge it finds, and the sum
-over the edges of the smaller degree is `O(n)` in a planar graph (Chiba and
-Nishizeki). So the whole triangulation is `O(nv + ne)`, with no hashing and no
-search for a free apex.
+The edges are kept in a hash set, so an adjacency test is `O(1)` in expectation and
+no edge is added twice. (Scanning the smaller of the two degrees is not enough: two
+adjacent hubs joined by many paths are opposite on every face, so the same edge
+would be found once per face, which is quadratic.) There are `O(nv + ne)` tests, so
+the whole triangulation is `O(nv + ne)` in expected time, with no search for a free
+apex.
 
 ```julia
 ne(planar_cycle(4))              # 4
