@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-10-25
+
 ### Fixed
 
 - `cycle_separator` on a triangulation returned a cycle of length proportional to
@@ -248,7 +250,8 @@ First release.
 - `Graphs` compatibility raised to `1.15`, the first release with
   `Graphs.is_planar`.
 
-[Unreleased]: https://github.com/sarielhp/BasicPlanarGraphs.jl/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/sarielhp/BasicPlanarGraphs.jl/compare/v0.2.5...HEAD
+[0.2.5]: https://github.com/sarielhp/BasicPlanarGraphs.jl/releases/tag/v0.2.5
 [0.2.4]: https://github.com/sarielhp/BasicPlanarGraphs.jl/releases/tag/v0.2.4
 [0.2.3]: https://github.com/sarielhp/BasicPlanarGraphs.jl/releases/tag/v0.2.3
 [0.2.2]: https://github.com/sarielhp/BasicPlanarGraphs.jl/releases/tag/v0.2.2
