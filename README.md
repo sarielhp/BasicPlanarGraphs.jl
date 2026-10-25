@@ -19,7 +19,7 @@ and iteration, not out of a human typing it.
 Please weigh that when you use it:
 
 - **The tests are the guarantee, not the prose.** Every claim in `docs/` should be
-  backable by a test or by a run of the example; the suite (9,400+ tests,
+  backable by a test or by a run of the example; the suite (98,000+ tests,
   including an independent `Graphs.jl`-based validator and a brute-force optimal
   separator oracle) is what is actually checked, and `tools/gate` runs it. Where
   a document and a test disagree, the test wins.

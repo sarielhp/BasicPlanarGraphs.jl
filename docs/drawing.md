@@ -36,7 +36,7 @@ For a graph with `n = nv(g)` vertices:
 - a triangulation uses exactly that box: `2(n-2)` wide and `n-2` high.
 
 Disconnected graphs are drawn one component at a time, each component in its own
-box, and the boxes are packed left to right with two free columns between them;
+box, and the boxes are packed left to right with one free column between them;
 the width is then the sum over components and the height the tallest component,
 so both stay `O(n)`. A component with one vertex is a point at height `0`, one
 with two vertices is a horizontal segment of length `1`.

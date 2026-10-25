@@ -132,43 +132,24 @@ function separator_scaling(sizes, seed, reps)
     return
 end
 
-# The band triangulation is the dominant stage on low-diameter graphs. This
-# suite reaches into internals on purpose: it explains the numbers above.
+# The stages of `separator` on a random triangulation: the virtual triangulation,
+# the choice of roots, and the level separator of each root (a BFS, the levels
+# and, when the band is large, the balanced cycle of the band). This suite reaches
+# into internals on purpose: it explains the numbers above.
 function separator_phases(n, seed, reps)
     g = random_triangulation(n; rng = MersenneTwister(seed))
     dg = BPG.DartGraph(g)
     println("== separator phases, random triangulation (n=", dg.n, ")")
-    for root in BPG._root_candidates(dg, 1)
-        levels = BPG.level_structure(dg, [root])
-        l0, l2 = BPG._level_plan(levels.depth, dg.n)
-        keep = BitVector(l0 < levels.depth[v] < l2 for v = 1:dg.n)
-        band = BPG.restrict(dg, keep)
-        ok = Ref(true)
-        t_tri = best_of(reps) do
-            ok[] = true
-            try
-                BPG.triangulate(band)
-            catch err
-                err isa ArgumentError || rethrow()
-                ok[] = false
-            end
-        end
-        t_band = best_of(() -> BPG._band_cycles(dg, levels, l0, l2), reps)
-        println(
-            "  root=",
-            root,
-            "  |band|=",
-            sum(keep),
-            "  triangulate=",
-            ok[] ? "ok" : "failed",
-            "  tri=",
-            round(1e3t_tri; digits = 1),
-            " ms",
-            "  band_cycles=",
-            round(1e3t_band; digits = 1),
-            " ms",
-        )
+    tri = BPG._triangles(dg)
+    roots = BPG._root_candidates(dg)
+    ms(t) = round(1e3t; digits = 1)
+    println("  triangles=", ms(best_of(() -> BPG._triangles(dg), reps)), " ms")
+    println("  roots=", ms(best_of(() -> BPG._root_candidates(dg), reps)), " ms")
+    for root in roots
+        t = best_of(() -> BPG._level_separator(dg, tri, root), reps)
+        println("  root=", root, "  level_separator=", ms(t), " ms")
     end
+    println("  whole separator=", ms(best_of(() -> separator(g), reps)), " ms")
     println()
     return
 end

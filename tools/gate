@@ -13,6 +13,7 @@
 #   audit            julia-audit --strict --include-tests src test examples benchmark
 #   static analysis  julia-static-analysis src test examples benchmark  (syntax, format, JET, imports)
 #   examples         examples/test_planarity.jl on a small local graph
+#   benchmark        benchmark/run.jl --quick --reps=1 (a smoke run, no timing is asserted)
 #   tests            Pkg.test()             (includes Aqua.test_all)
 #   build            tools/build            (once, after the checks pass)
 #
@@ -74,6 +75,13 @@ def example_command
   ]
 end
 
+def benchmark_command
+  [
+    JULIA, "--project=#{PROJECT}", "--startup-file=no",
+    File.join(PROJECT, "benchmark", "run.jl"), "--quick", "--reps=1"
+  ]
+end
+
 at_exit { FileUtils.rm_rf(example_workdir) if @example_workdir }
 
 def steps(full:, build:)
@@ -89,6 +97,7 @@ def steps(full:, build:)
       "julia-static-analysis",
     ],
     ["examples", example_command, nil],
+    ["benchmark", benchmark_command, nil],
     ["tests", julia("using Pkg", "Pkg.test()"), nil],
   ]
   list << ["aqua", ["julia-static-analysis", "--aqua"], "julia-static-analysis"] if full

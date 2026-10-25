@@ -8,7 +8,7 @@ review-cycle contract in `~/prog/standards/workflow`; the settings live in
 
 ```bash
 tools/build            # instantiate the environment and load the package
-tools/gate             # audit, static analysis, examples, tests (with Aqua), build (~45 s)
+tools/gate             # audit, static analysis, examples, benchmark smoke, tests (with Aqua), build (~60 s)
 tools/gate --full      # .. plus a standalone Aqua run
 tools/gate --no-build  # .. without the build step
 ```
@@ -20,6 +20,7 @@ tools/gate --no-build  # .. without the build step
 | audit | `julia-audit --strict --include-tests src test examples benchmark` | nesting ≤ 4, cognitive complexity ≤ 15, method tiers (80 / 120 lines), file size, argument count, idiom and trap rules |
 | static analysis | `julia-static-analysis src test examples benchmark` | every file parses, JuliaFormatter would change nothing, JET type inference, ExplicitImports |
 | examples | `examples/test_planarity.jl --graph … --sizes 10,all` | the planarity example runs end to end on a 13-vertex wheel written by the gate: read, planarity test, embedding, output, separator, verification |
+| benchmark | `benchmark/run.jl --quick --reps=1` | the benchmark suites still run (no timing is asserted) |
 | tests | `Pkg.test()` | the suite below, including `Aqua.test_all` |
 | build | `tools/build` | the package still loads |
 
@@ -52,8 +53,9 @@ its generators.
 `examples/` is part of the checked code: the audit and the format check cover it,
 and `tools/gate` runs `examples/test_planarity.jl` on a 13-vertex wheel that the
 gate writes itself, so a broken example fails the gate without any network access.
-`benchmark/` is audited and format-checked the same way, but the gate never runs
-it, because its timings are machine-dependent.
+`benchmark/` is audited and format-checked the same way, and the gate runs it once
+with `--quick --reps=1` so that it cannot rot unnoticed; its timings are
+machine-dependent, so none is asserted.
 
 Two properties make the separator tests meaningful rather than circular:
 
@@ -65,9 +67,12 @@ Two properties make the separator tests meaningful rather than circular:
   can assert that the algorithm is never better than optimal — the direction that
   catches an invalid `C`.
 
-The scaling test compares `separator` on a `60 x 60` and a `120 x 120` grid and
-on random triangulations of 2000 and 8000 vertices, allowing a factor of 30 for a
-4× size increase.
+The scaling test takes the fastest of five garbage-collected runs. It compares
+`separator` on a `60 x 60` and a `120 x 120` grid and on random triangulations of
+2000 and 8000 vertices (a factor of 30 for 4× the size), `cycle_separator` and
+`triangulate` on ladders of 5000 and 80 000 columns, and `grid_drawing` and
+`planar_embedding` on 20 000 and 320 000 isolated vertices (a factor of 80 for
+16× the size, which a quadratic algorithm exceeds by far).
 
 ## The planarity example
 

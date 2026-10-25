@@ -20,23 +20,24 @@ suite is the generous linear-scaling check in `test/scaling_test.jl`.
 
 ## Reference run
 
-AMD Ryzen 7 5700G (16 CPUs), Linux, Julia 1.13.2, `--reps=3`, `--seed=3`.
+AMD Ryzen 7 5700G (16 CPUs), Linux, Julia 1.13.2, `--reps=3`, `--seed=3`, at
+version 0.2.3 plus the fixes of the review branch (`triangulate` by ladder).
 
 ### Operations on the same graph
 
 | operation | random triangulation, n=20 000, m=59 994 | grid 200×200, n=40 000, m=79 600 | wheel, n=50 001, m=100 000 |
 |---|---:|---:|---:|
-| `faces` | 19.2 ms | 11.8 ms | 23.3 ms |
-| `nfaces` | 13.9 ms | 11.3 ms | 16.4 ms |
-| `is_planar_embedding` | 15.3 ms | 14.7 ms | 17.7 ms |
-| `dual` | 22.4 ms | n/a (multigraph) | 32.7 ms |
-| `separator` | **281.3 ms** | 47.9 ms | 179.9 ms |
-| `planar_embedding(::PlanarGraph)` | 14.4 ms | 16.7 ms | 17.8 ms |
-| `triangulate` | 41.2 ms | 56.1 ms | 76.4 ms |
-| `grid_drawing` | 52.5 ms | 65.7 ms | 91.5 ms |
-| `cycle_separator` | 76.9 ms | 94.7 ms | 95.6 ms |
-| `planar_embedding(::SimpleGraph)` | 150.9 ms | 169.5 ms | 239.4 ms |
-| `is_planar_linear(::SimpleGraph)` | 143.8 ms | 164.8 ms | 238.9 ms |
+| `faces` | 18.2 ms | 7.5 ms | 9.6 ms |
+| `nfaces` | 12.9 ms | 7.0 ms | 9.4 ms |
+| `is_planar_embedding` | 12.2 ms | 9.6 ms | 11.5 ms |
+| `dual` | 27.7 ms | n/a (parallel edges) | 27.5 ms |
+| `separator` | 57.5 ms | 23.3 ms | 46.1 ms |
+| `planar_embedding(::PlanarGraph)` | 16.6 ms | 9.7 ms | 11.3 ms |
+| `triangulate` | 41.1 ms | 61.2 ms | 74.8 ms |
+| `grid_drawing` | 55.9 ms | 63.7 ms | 85.1 ms |
+| `cycle_separator` | 37.9 ms | 38.7 ms | 31.1 ms |
+| `planar_embedding(::SimpleGraph)` | 146.9 ms | 150.2 ms | 216.8 ms |
+| `is_planar_linear(::SimpleGraph)` | 132.0 ms | 148.9 ms | 198.9 ms |
 
 `dual` is `n/a` for a grid because a corner cell shares two edges with the outer
 face, so the dual has parallel edges, which a simple `PlanarGraph` cannot store.
@@ -45,43 +46,27 @@ face, so the dual has parallel edges, which a simple `PlanarGraph` cannot store.
 
 | n | random triangulation | grid | wheel |
 |---:|---:|---:|---:|
-| 5 000 | 55.2 ms | 4.0 ms | 11.5 ms |
-| 10 000 | 132.7 ms | 7.8 ms | 28.3 ms |
-| 20 000 | 260.7 ms | 20.3 ms | 57.2 ms |
-| 40 000 | 585.8 ms | 38.3 ms | 123.8 ms |
+| 5 000 | 9.9 ms | 2.2 ms | 3.2 ms |
+| 10 000 | 20.6 ms | 5.1 ms | 6.6 ms |
+| 20 000 | 45.7 ms | 9.6 ms | 13.8 ms |
+| 40 000 | 141.4 ms | 20.5 ms | 34.0 ms |
 
 ### Where `separator` spends it
 
-`--suite=phases`, random triangulation, n=40 000:
-
-```
-root=1      |band|=39664  triangulate=failed  tri=33.9 ms  band_cycles=56.5 ms
-root=28305  |band|=39491  triangulate=failed  tri=27.4 ms  band_cycles=61.7 ms
-root=2      |band|=39959  triangulate=ok      tri=45.0 ms  band_cycles=94.7 ms
-root=35649  |band|=39810  triangulate=failed  tri=20.2 ms  band_cycles=56.8 ms
-```
+`--suite=phases`, random triangulation, n=10 000 (`--quick`): the virtual
+triangulation takes 2.9 ms, the choice of roots 1.6 ms, the level separator of
+each of the four roots about 3 ms, and the whole call 29 ms.
 
 ## Reading the numbers
 
-- **`separator` is the outlier**, by roughly 5× over the next slowest operation
-  on the same graph. The cause is input shape, not a superlinear step: a random
-  triangulation has `O(log n)` BFS diameter, so Lipton–Tarjan's middle band is
-  almost the whole graph, while on a grid it is a thin strip. `_best_connected`
-  repeats the band triangulation for up to four roots, and three of the four
-  bands here are not 2-connected, so the work is discarded after `triangulate`
-  throws. When a band does work, up to six candidate cycles are each evaluated by
-  a full `_split_and_pack` pass.
-- The timings are sensitive to the seed even at fixed `n`: the same 20 000-vertex
-  triangulation with another seed took 740 ms instead of 281 ms, because a
-  different root makes the band triangulation succeed and the candidate cycles
-  get evaluated. Scaling stays linear in `n` in every observed case.
-- One stage of `separator` is formally `O(n log n)`: `_balanced_darts`
-  (`src/separator.jl`, line 394) sorts all dual-tree edges to find the most
-  balanced ones.
-  The file header claims `O(n + m)`, so this sort is the one place where the
-  claim is stronger than the implementation.
-- `planar_embedding(::SimpleGraph)` is about 10× `is_planar_embedding` per edge.
-  That is expected in kind: the former runs the Left-Right test and builds a
-  rotation system, the latter only validates one that already exists.
-- Everything else sits between about 150 and 1 300 ns per edge, which is the
-  range these operations are expected to occupy.
+- Every operation costs between about 90 and 2 500 ns per edge. The slowest is
+  `planar_embedding(::SimpleGraph)` (and so `is_planar_linear`): it runs the
+  Left-Right test and builds the rotation system, while `is_planar_embedding` only
+  validates one that exists, so a factor of about 10 between them is expected.
+- `separator` on a random triangulation takes about 2 µs per vertex at 5 000 to
+  20 000 vertices and 3.5 µs at 40 000; the algorithm is linear, and the rise is
+  most likely cache behaviour, which this survey did not investigate. On a grid
+  or a wheel the cost per vertex is flat within 30 %.
+- The timings are machine-dependent and vary from run to run; the only timing
+  assertion in the test suite is the generous scaling check in
+  `test/scaling_test.jl`.

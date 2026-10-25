@@ -613,12 +613,28 @@ function main(args)
     g = load_input(opts)
 
     rows = Any[]
-    for k in opts.sizes
+    for k in _distinct_sizes(opts.sizes, nv(g))
         push!(rows, run_size(g, k, opts))
         GC.gc()
     end
     print_summary(rows, opts)
+    # A graph that is not planar is a result; a planar one whose separator or
+    # embedding fails its own verification is a failure of the run.
+    all(r -> !r.planar || r.valid, rows) || exit(1)
     return rows
+end
+
+# The sizes to run: every size of at least `n` is the whole graph, which runs once.
+function _distinct_sizes(sizes, n::Integer)
+    seen = Set{Int}()
+    distinct = Union{Int,Symbol}[]
+    for k in sizes
+        effective = k === :all ? n : min(k, n)
+        effective in seen && continue
+        push!(seen, effective)
+        push!(distinct, k)
+    end
+    return distinct
 end
 
 main(ARGS)

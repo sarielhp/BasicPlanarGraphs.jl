@@ -22,6 +22,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   10 000 000, a keyword) before allocating, honour the `vertices` line (a larger
   label or a second `vertices` line is an error), and report a rotation line
   without `:` and a vertex without a rotation line as `ArgumentError`.
+- `faces`, `triangulate` and `planar_embedding` keep the vertex type of their input
+  (`Int32` stays `Int32`), `PlanarGraph(graph, rotation)` copies the graph, and
+  `planar_embedding` and `is_planar_linear` throw `ArgumentError` for directed graphs.
+- The benchmark `phases` suite works again and the gate runs the benchmark once
+  (`--quick`); `benchmark/README.md` has current numbers. The planarity example runs
+  each distinct size once and exits non-zero when a planar result fails its check.
+- Documentation: test count, the `Graphs.jl` functions a `PlanarGraph` accepts, the
+  list of exports, the `write_*` return value, the packing of components in drawings.
 - `grid_drawing` and `planar_embedding` are linear for graphs with many components
   (they were quadratic).
 

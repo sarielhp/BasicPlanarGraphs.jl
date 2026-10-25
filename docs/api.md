@@ -34,8 +34,10 @@ vertex); `hash` agrees with it (it looks at the graph only, which equal embeddin
 
 ### `nv(g)`, `ne(g)`, `vertices(g)`, `edges(g)`, `neighbors(g, v)`, `degree(g, v)`, `has_edge(g, u, v)`
 
-`Graphs.jl` interface, forwarded to the wrapped graph. Any `Graphs.jl` function
-that only reads adjacency accepts a `PlanarGraph`.
+`Graphs.jl` interface, forwarded to the wrapped graph: exactly the seven functions
+listed. A `PlanarGraph` is not an `AbstractGraph`, so other `Graphs.jl` functions
+(`connected_components`, `bfs_parents`, …) do not accept it; pass `g.graph`, the
+wrapped `SimpleGraph`, to them.
 
 ### `neighbor_order(g, v) -> Vector{T}`
 
@@ -89,8 +91,9 @@ graph. See [Planarity and embedding](planarity.md).
 `Graphs.is_planar`, imported and re-exported under the same name, so a program
 that loads both packages sees one function. It decides the same criterion, but it
 recurses once per DFS edge and sorts nesting depths in `O(nv · ne)`, so it
-overflows the Julia stack from about 10^5 vertices on a path and is quadratic
-well before that; the resulting `StackOverflowError` leaves the session
+overflows the Julia stack from a few ten thousand vertices on a path (between 16 000
+and 32 000 on Julia 1.13) and is quadratic well before that (4 000, 8 000 and 16 000
+vertices took 55, 319 and 2 185 ms); the resulting `StackOverflowError` leaves the session
 untrustworthy. For a `PlanarGraph` it asks about the graph and ignores the
 stored rotation. Prefer `is_planar_linear` unless interchange with `Graphs.jl`
 is the point.
@@ -256,8 +259,11 @@ section, or, when the file has only a rotation section, the edges that rotation
 induces.
 
 Both readers take an optional second argument naming the source for error
-messages (default `<io>`); errors are `ArgumentError` with the form
-`source:line: message`.
+messages (default `<io>`) and the keyword `max_vertices` (default 10 000 000);
+errors are `ArgumentError` with the form `source:line: message`.
+
+The vertex lists that `separator`, `cycle_separator` and `separator_partition`
+return are `Vector{Int}` whatever the vertex type of the graph.
 
 ## Summary table
 
@@ -278,8 +284,9 @@ messages (default `<io>`); errors are `ArgumentError` with the form
 | `dual` | operation | `PlanarGraph` |
 | `triangulate` | operation | `PlanarGraph` |
 | `separator` | algorithm | `Tuple{Vector,Vector,Vector}` |
+| `separator_partition`, `SeparatorPartition` | algorithm / result | `SeparatorPartition` |
 | `cycle_separator` | algorithm | `Vector` |
 | `cycle_sides` | query | `Tuple{Vector,Vector}` |
 | `planar_path`, `planar_cycle`, `planar_grid`, `planar_wheel`, `random_triangulation` | generators | `PlanarGraph` |
-| `write_planar_graph`, `write_graph` | file output | `IO` or `nothing` |
+| `write_planar_graph`, `write_graph` | file output | the `IO` for an `IO` argument; unspecified for a path |
 | `read_planar_graph`, `read_graph` | file input | `PlanarGraph` / `SimpleGraph` |
