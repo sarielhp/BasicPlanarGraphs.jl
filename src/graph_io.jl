@@ -23,6 +23,10 @@
 
 const GRAPH_FILE_MAGIC = "BasicPlanarGraphs 1"
 
+# A vertex count or label above this is refused by the readers unless the caller
+# raises `max_vertices`: a file of a few bytes could otherwise ask for terabytes.
+const DEFAULT_MAX_VERTICES = 10_000_000
+
 """
     write_planar_graph(io, g::PlanarGraph)
     write_planar_graph(path::AbstractString, g::PlanarGraph)
@@ -104,7 +108,10 @@ end
 
 # `1: 2 4` or `1:` — the neighbour list may be empty.
 function _parse_rotation_line(source::AbstractString, lineno::Integer, line::AbstractString)
-    head, tail = split(line, ':'; limit = 2)
+    colon = findfirst(':', line)
+    colon === nothing && _parse_error(source, lineno, "a rotation line is `v: w1 w2 ...`")
+    head = line[1:prevind(line, colon)]
+    tail = line[nextind(line, colon):end]
     vertex = _parse_int(source, lineno, strip(head))
     vertex >= 1 || _parse_error(source, lineno, "vertex labels start at 1")
     neighbours = [_parse_int(source, lineno, w) for w in split(tail)]
@@ -122,9 +129,49 @@ function _parse_edges_line(source::AbstractString, lineno::Integer, words)
     return min(u, w), max(u, w)
 end
 
+# The state of a file being read: the vertex count so far, the edges, whether an
+# `edges` section was seen, and the rotation with one flag per known vertex.
+mutable struct _GraphParser
+    n::Int
+    declared::Int
+    limit::Int
+    edges::Vector{Tuple{Int,Int}}
+    edge_set::Set{Tuple{Int,Int}}
+    has_edges::Bool
+    rotation::Union{Nothing,Vector{Vector{Int}}}
+    given::BitVector
+    section::Symbol
+end
+
+function _GraphParser(limit::Integer)
+    return _GraphParser(
+        0,
+        -1,
+        limit,
+        Tuple{Int,Int}[],
+        Set{Tuple{Int,Int}}(),
+        false,
+        nothing,
+        falses(0),
+        :none,
+    )
+end
+
+function _check_limit(st::_GraphParser, source, lineno, count::Integer)
+    count <= st.limit || _parse_error(
+        source,
+        lineno,
+        "vertex count or label $count exceeds max_vertices = $(st.limit)",
+    )
+    return nothing
+end
+
 # Rotation lines may come in any order; every vertex may appear once.
-function _parse_rotation!(rotation, given, source, lineno, line)
+function _parse_rotation!(st::_GraphParser, source, lineno, line)
+    rotation = st.rotation::Vector{Vector{Int}}
+    given = st.given
     vertex, neighbours = _parse_rotation_line(source, lineno, line)
+    _check_limit(st, source, lineno, maximum(neighbours; init = vertex))
     while length(rotation) < vertex
         push!(rotation, Int[])
         push!(given, false)
@@ -135,42 +182,27 @@ function _parse_rotation!(rotation, given, source, lineno, line)
     return maximum(neighbours; init = vertex)
 end
 
-# The state of a file being read: the vertex count so far, the edges, whether an
-# `edges` section was seen, and the rotation with one flag per known vertex.
-mutable struct _GraphParser
-    n::Int
-    edges::Vector{Tuple{Int,Int}}
-    edge_set::Set{Tuple{Int,Int}}
-    has_edges::Bool
-    rotation::Union{Nothing,Vector{Vector{Int}}}
-    given::BitVector
-    section::Symbol
-end
-
-function _GraphParser()
-    return _GraphParser(
-        0,
-        Tuple{Int,Int}[],
-        Set{Tuple{Int,Int}}(),
-        false,
-        nothing,
-        falses(0),
-        :none,
-    )
-end
-
-function _parse_graph_file(io::IO, source::AbstractString)
-    st = _GraphParser()
+function _parse_graph_file(io::IO, source::AbstractString, limit::Integer)
+    st = _GraphParser(limit)
     for (lineno, raw) in enumerate(eachline(io))
         _consume_line!(st, source, lineno, _strip_comment(raw))
     end
 
+    if st.declared >= 0
+        st.n <= st.declared || _parse_error(
+            source,
+            0,
+            "vertex $(st.n) exceeds the $(st.declared) vertices that `vertices` declares",
+        )
+        st.n = st.declared
+    end
     rotation = st.rotation
     rotation === nothing && return _GraphFile(st.n, st.edges, st.has_edges, nothing)
     length(rotation) == st.n || _parse_error(
         source,
         0,
-        "rotation has $(length(rotation)) lines for $(st.n) vertices",
+        "rotation has $(length(rotation)) lines for $(st.n) vertices; vertex " *
+        "$(length(rotation) + 1) has no rotation line",
     )
     return _GraphFile(st.n, st.edges, st.has_edges, rotation)
 end
@@ -192,8 +224,11 @@ end
 function _consume_directive!(st::_GraphParser, source, lineno, keyword, words)
     if keyword == "vertices"
         length(words) == 2 || _parse_error(source, lineno, "expected `vertices <n>`")
-        st.n = _parse_int(source, lineno, words[2])
-        st.n >= 0 || _parse_error(source, lineno, "vertex count must be non-negative")
+        st.declared < 0 || _parse_error(source, lineno, "`vertices` is given twice")
+        count = _parse_int(source, lineno, words[2])
+        count >= 0 || _parse_error(source, lineno, "vertex count must be non-negative")
+        _check_limit(st, source, lineno, count)
+        st.declared = count
         return nothing
     end
     if keyword == "end"
@@ -216,18 +251,18 @@ function _consume_data!(st::_GraphParser, source, lineno, line, words)
         (u, w) in st.edge_set && _parse_error(source, lineno, "duplicate edge $u-$w")
         push!(st.edge_set, (u, w))
         push!(st.edges, (u, w))
+        _check_limit(st, source, lineno, w)
         st.n = max(st.n, w)
         return nothing
     end
-    rotation = st.rotation::Vector{Vector{Int}}
-    st.n = max(st.n, _parse_rotation!(rotation, st.given, source, lineno, line))
+    st.n = max(st.n, _parse_rotation!(st, source, lineno, line))
     return nothing
 end
 
-function _read_file(path::AbstractString, parser)
+function _read_file(path::AbstractString, parser; max_vertices::Integer)
     isfile(path) || throw(ArgumentError("no such file: $path"))
     return open(path) do io
-        parser(io, path)
+        parser(io, path; max_vertices)
     end
 end
 
@@ -248,17 +283,23 @@ function _check_sections_agree(
 end
 
 """
-    read_planar_graph(io) -> PlanarGraph
-    read_planar_graph(path) -> PlanarGraph
+    read_planar_graph(io; max_vertices = $DEFAULT_MAX_VERTICES) -> PlanarGraph
+    read_planar_graph(path; max_vertices = $DEFAULT_MAX_VERTICES) -> PlanarGraph
 
 Read a graph together with its embedding, as written by
 [`write_planar_graph`](@ref). The rotation system goes through the `PlanarGraph`
 constructor, so a malformed rotation raises an `ArgumentError` instead of
 producing a silently broken graph; when the file has both sections they must
-describe the same graph.
+describe the same graph. A vertex count or label above `max_vertices` is refused
+before anything is allocated, and a label above the count that `vertices`
+declares is an error.
 """
-function read_planar_graph(io::IO, source::AbstractString = "<io>")
-    parsed = _parse_graph_file(io, source)
+function read_planar_graph(
+    io::IO,
+    source::AbstractString = "<io>";
+    max_vertices::Integer = DEFAULT_MAX_VERTICES,
+)
+    parsed = _parse_graph_file(io, source, max_vertices)
     parsed.rotation === nothing && throw(
         ArgumentError(
             "$source: no `rotation` section; use read_graph for an unembedded graph",
@@ -269,11 +310,16 @@ function read_planar_graph(io::IO, source::AbstractString = "<io>")
     return g
 end
 
-read_planar_graph(path::AbstractString) = _read_file(path, read_planar_graph)
+function read_planar_graph(
+    path::AbstractString;
+    max_vertices::Integer = DEFAULT_MAX_VERTICES,
+)
+    return _read_file(path, read_planar_graph; max_vertices)
+end
 
 """
-    read_graph(io) -> SimpleGraph
-    read_graph(path) -> SimpleGraph
+    read_graph(io; max_vertices = $DEFAULT_MAX_VERTICES) -> SimpleGraph
+    read_graph(path; max_vertices = $DEFAULT_MAX_VERTICES) -> SimpleGraph
 
 Read the graph of a file written by [`write_graph`](@ref) or
 [`write_planar_graph`](@ref), without its embedding. This is the way to obtain a
@@ -282,10 +328,15 @@ planar graph's underlying graph, which is the input of [`is_planar`](@ref) and
 
 The edges are those of the `edges` section; a file with only a `rotation`
 section describes the graph through its rotations, and then the graph is the one
-that rotation induces.
+that rotation induces. `max_vertices` and the `vertices` line are handled as in
+[`read_planar_graph`](@ref).
 """
-function read_graph(io::IO, source::AbstractString = "<io>")
-    parsed = _parse_graph_file(io, source)
+function read_graph(
+    io::IO,
+    source::AbstractString = "<io>";
+    max_vertices::Integer = DEFAULT_MAX_VERTICES,
+)
+    parsed = _parse_graph_file(io, source, max_vertices)
     if !parsed.has_edges && parsed.rotation !== nothing
         return PlanarGraph(parsed.rotation).graph
     end
@@ -296,4 +347,6 @@ function read_graph(io::IO, source::AbstractString = "<io>")
     return graph
 end
 
-read_graph(path::AbstractString) = _read_file(path, read_graph)
+function read_graph(path::AbstractString; max_vertices::Integer = DEFAULT_MAX_VERTICES)
+    return _read_file(path, read_graph; max_vertices)
+end

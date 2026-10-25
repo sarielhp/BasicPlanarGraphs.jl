@@ -168,5 +168,37 @@ end
         @test read_planar_graph(IOBuffer(String(take!(io)))) == k5
         # Missing files.
         @test_throws ArgumentError read_graph(joinpath(tempdir(), "no-such-graph.txt"))
+        # A rotation line needs its colon, not a BoundsError.
+        @test_throws ArgumentError read_graph(IOBuffer("rotation\n1 2 3\n"))
+        @test_throws ArgumentError read_planar_graph(IOBuffer("rotation\n1 2 3\n"))
+
+        # `vertices` is a fixed count, given once.
+        @test_throws ArgumentError read_graph(IOBuffer("vertices 2\nedges\n1 5\nend\n"))
+        @test_throws ArgumentError read_graph(IOBuffer("vertices 3\nvertices 4\n"))
+        @test nv(read_graph(IOBuffer("edges\n1 2\nend\nvertices 5\n"))) == 5
+
+        # A tiny file cannot ask for an enormous graph.
+        for text in (
+            "vertices 100000000\n",
+            "vertices 4000000000000\n",
+            "edges\n1 100000000\nend\n",
+            "rotation\n10000000000: 1\nend\n",
+        )
+            @test_throws ArgumentError read_graph(IOBuffer(text))
+        end
+        @test nv(read_graph(IOBuffer("vertices 100\n"); max_vertices = 100)) == 100
+        @test_throws ArgumentError read_graph(
+            IOBuffer("vertices 101\n");
+            max_vertices = 100,
+        )
+
+        # A referenced vertex without a rotation line says so.
+        err = try
+            read_planar_graph(IOBuffer("rotation\n1: 5\nend\n"))
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError && occursin("has no rotation line", err.msg)
     end
 end

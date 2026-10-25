@@ -52,7 +52,10 @@ end
   the line, blank lines are ignored, and both are accepted anywhere.
 - `vertices <n>` fixes the vertex count, which is what makes isolated vertices
   and the empty graph representable. It is optional — without it the count is the
-  largest label in the file — and it may appear anywhere.
+  largest label in the file — it may appear anywhere, and it may appear once. A
+  label above `n` is an error. The count, and every label, must not exceed the
+  keyword `max_vertices` of the readers (default 10 000 000), which is checked
+  before anything is allocated, so a tiny file cannot ask for terabytes.
 - `edges` opens a section of edge lines. Each line is `u v`, the two labels in
   either order; an edge may be listed once per file.
 - `rotation` opens a section of rotation lines. Each line is `v: w1 w2 …`, the
@@ -79,9 +82,12 @@ Reading validates the syntax and the consistency of the file, and raises
 | label `0`, or a self-loop `1 1` | `vertex labels start at 1` / `self-loops are not supported` |
 | the same edge twice | `duplicate edge 1-2` |
 | `vertices many`, `vertices -1` | `` `many` is not an integer `` / `vertex count must be non-negative` |
+| `vertices` twice, or a label above the declared count | `` `vertices` is given twice `` / `vertex 5 exceeds the 2 vertices that `vertices` declares` |
+| a count or label above `max_vertices` | `vertex count or label 100000000 exceeds max_vertices = 10000000` |
+| a rotation line without `:` | ``a rotation line is `v: w1 w2 ...` `` |
 | two rotation lines for one vertex | `duplicate rotation for vertex 2` |
 | a rotation that lists the vertex itself | `vertex 2 lists itself as a neighbour` |
-| fewer rotation lines than vertices | `rotation has 3 lines for 4 vertices` |
+| fewer rotation lines than vertices | `rotation has 3 lines for 4 vertices; vertex 4 has no rotation line` |
 | `edges` and `rotation` differing | ``the `edges` and `rotation` sections describe different graphs`` |
 | `read_planar_graph` without a `rotation` section | ``no `rotation` section; use read_graph for an unembedded graph`` |
 

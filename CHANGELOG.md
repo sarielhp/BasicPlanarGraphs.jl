@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `PlanarGraph(graph, rotation)` throws `ArgumentError` for non-integer entries;
   `add_dart!` validates its anchor before changing the graph;
   `random_triangulation` accepts any `Integer`.
+- The graph readers refuse a vertex count or label above `max_vertices` (default
+  10 000 000, a keyword) before allocating, honour the `vertices` line (a larger
+  label or a second `vertices` line is an error), and report a rotation line
+  without `:` and a vertex without a rotation line as `ArgumentError`.
 - `grid_drawing` and `planar_embedding` are linear for graphs with many components
   (they were quadratic).
 
