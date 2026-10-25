@@ -209,8 +209,7 @@ const _ORIENTED = 0
 const _BACK_EDGE = 1
 const _TREE_EDGE = 2
 
-function _dfs_orientation!(st::_LRState, root::Int)
-    ind = zeros(Int, length(st.adj))
+function _dfs_orientation!(st::_LRState, root::Int, ind::Vector{Int})
     skip_init = Set{Tuple{Int,Int}}()
     dfs_stack = Int[root]
 
@@ -383,8 +382,7 @@ function _trim_side!(st::_LRState, side::_Interval, other::_Interval, u::Int)
     return nothing
 end
 
-function _dfs_testing!(st::_LRState, root::Int)
-    ind = zeros(Int, length(st.adj))
+function _dfs_testing!(st::_LRState, root::Int, ind::Vector{Int})
     skip_init = Set{Tuple{Int,Int}}()
     dfs_stack = Int[root]
 
@@ -470,8 +468,7 @@ function _initialize_rotation!(halves::_HalfEdges, v::Int, ordered::Vector{Int})
     return halves
 end
 
-function _dfs_embedding!(st::_LRState, root::Int)
-    ind = zeros(Int, length(st.adj))
+function _dfs_embedding!(st::_LRState, root::Int, ind::Vector{Int})
     dfs_stack = Int[root]
     halves = st.halves
 
@@ -570,16 +567,18 @@ function _rotation_system(adj::Vector{Vector{Int}})
 
     st = _LRState(adj)
     roots = Int[]
+    ind = zeros(Int, n)
     for v = 1:n
         st.height[v] == -1 || continue
         st.height[v] = 0
         push!(roots, v)
-        _dfs_orientation!(st, v)
+        _dfs_orientation!(st, v, ind)
     end
 
     _order_out_adjs_by_depth!(st)
+    fill!(ind, 0)
     for r in roots
-        _dfs_testing!(st, r) || return nothing
+        _dfs_testing!(st, r, ind) || return nothing
     end
 
     for vw in st.oriented
@@ -589,8 +588,9 @@ function _rotation_system(adj::Vector{Vector{Int}})
     for v = 1:n
         _initialize_rotation!(st.halves, v, st.ordered_adjs[v])
     end
+    fill!(ind, 0)
     for r in roots
-        _dfs_embedding!(st, r)
+        _dfs_embedding!(st, r, ind)
     end
 
     return [_rotation_of(st.halves, v) for v = 1:n]

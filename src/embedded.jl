@@ -322,6 +322,25 @@ function induced(g::DartGraph, keep::AbstractVector{Bool})
     return h, ids
 end
 
+# The embedded graph induced by the vertices `ids` of `g`, a union of components
+# of `g`, so that every neighbour of a vertex in `ids` is in `ids`. `index` is a
+# scratch vector of length `g.n`; it is overwritten at the positions in `ids`.
+# The work is proportional to the size of `ids` and its darts.
+function _component_graph(g::DartGraph, ids::Vector{Int}, index::Vector{Int})
+    for (i, v) in enumerate(ids)
+        index[v] = i
+    end
+    h = DartGraph(length(ids))
+    for (i, v) in enumerate(ids)
+        anchor = 0
+        for d in darts_of(g, v)
+            anchor = add_dart!(h, i, index[g.head[d]], anchor)
+        end
+    end
+    _match_pending_twins!(h)
+    return h
+end
+
 # Pair up darts of `h` that were created without twins. Rotations built by
 # `DartGraph`, `restrict` and `induced` come from simple graphs, so each
 # ordered pair of ends occurs once. The twin of the dart with the r-th smallest

@@ -1,10 +1,17 @@
 # The algorithm is linear, so quadrupling the number of vertices must not blow
 # the running time up. Generous factors keep this stable on loaded machines.
 
-function measure(g; repeats = 2)
-    separator(g)                     # warm up compilation and caches
-    return minimum(@elapsed(separator(g)) for _ = 1:repeats)
+# The fastest of several runs after a warm-up, with a garbage collection before
+# each, so that a pause or a busy core does not decide the comparison.
+function fastest(f, g; repeats = 5)
+    f(g)
+    return minimum(begin
+        GC.gc()
+        @elapsed f(g)
+    end for _ = 1:repeats)
 end
+
+measure(g) = fastest(separator, g)
 
 @testset "linear scaling" begin
     small = planar_grid(60, 60; diagonals = true)
@@ -28,20 +35,19 @@ end
     @test t_large <= 30 * t_small + 0.05
 
     # One huge face used to make the cycle separator quadratic (a ladder has a
-    # single outer face of length n): an 8-fold size is allowed 25 times the time.
-    function measure_cycle(g)
-        cycle_separator(g)
-        return minimum(@elapsed(cycle_separator(g)) for _ = 1:2)
-    end
+    # single outer face of length n) and triangulate as well. A 16-fold size would
+    # cost 256 times as much if quadratic and about 16 times if linear; allow 80.
     ladder_small = planar_grid(2, 5_000)
-    ladder_large = planar_grid(2, 40_000)
-    @test measure_cycle(ladder_large) <= 25 * measure_cycle(ladder_small) + 0.05
-
-    # The same single huge face made triangulate quadratic as well.
-    function measure_triangulate(g)
-        triangulate(g)
-        return minimum(@elapsed(triangulate(g)) for _ = 1:2)
+    ladder_large = planar_grid(2, 80_000)
+    for f in (cycle_separator, triangulate)
+        @test fastest(f, ladder_large) <= 80 * fastest(f, ladder_small) + 0.05
     end
-    @test measure_triangulate(planar_grid(2, 40_000)) <=
-          25 * measure_triangulate(planar_grid(2, 5_000)) + 0.05
+
+    # Many components used to make the drawing and the planarity test quadratic:
+    # each component cost a pass over all the vertices.
+    isolated_small = SimpleGraph(20_000)
+    isolated_large = SimpleGraph(320_000)
+    for f in (grid_drawing, planar_embedding)
+        @test fastest(f, isolated_large) <= 80 * fastest(f, isolated_small) + 0.05
+    end
 end

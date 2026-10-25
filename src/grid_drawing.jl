@@ -97,15 +97,15 @@ function _grid_drawing(dg::DartGraph)
     n == 0 && return GridDrawing(x, y, 0, 0)
 
     label, ncomps = component_labels(dg)
+    members = _group_by_label(label, ncomps)
+    index = zeros(Int, n)
     offset = 0
-    for c = 1:ncomps
-        keep = [label[v] == c for v = 1:n]
-        sub, ids = induced(dg, keep)
+    for ids in members
         if length(ids) <= 2
             offset = _place_trivial_component!(x, y, ids, offset)
             continue
         end
-        placed = _triangulate_component(sub)
+        placed = _triangulate_component(_component_graph(dg, ids, index))
         cx, cy = _fpp_coordinates(placed)
         minx, miny = minimum(cx), minimum(cy)
         for (i, v) in enumerate(ids)
@@ -116,6 +116,22 @@ function _grid_drawing(dg::DartGraph)
     end
 
     return GridDrawing(x, y, maximum(x), maximum(y))
+end
+
+# The vertices of each component, in increasing order, by one counting sort, so
+# that the work for all components together is linear.
+function _group_by_label(label::Vector{Int}, ncomps::Int)
+    sizes = zeros(Int, ncomps)
+    for c in label
+        sizes[c] += 1
+    end
+    members = [Vector{Int}(undef, sizes[c]) for c = 1:ncomps]
+    fill!(sizes, 0)
+    for (v, c) in enumerate(label)
+        sizes[c] += 1
+        members[c][sizes[c]] = v
+    end
+    return members
 end
 
 # One vertex, or two vertices joined by an edge: a single column, or two.
