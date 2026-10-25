@@ -32,57 +32,51 @@ function fastest(f, g; repeats = 5)
     end for _ = 1:repeats)
 end
 
-# Tube of circumference 4 and length L from vertex 1 (r) to a blob: rim of
-# m = 4q vertices fanned from the last ring, capped by one vertex z. All faces
-# are triangles. Rotations are counter-clockwise for rings drawn concentrically.
-function tube_blob(L, q; zrev = true)
-    m = 4q
-    r = 1
-    a(i) = 1 + i
-    b(i) = 1 + L + i
-    c(i) = 1 + 2L + i
-    d(i) = 1 + 3L + i
-    w(j) = 1 + 4L + mod1(j, m)
-    z = 2 + 4L + m
-    n = z
-    rot = [Int[] for _ = 1:n]
-    rot[r] = [a(1), b(1), c(1), d(1)]
-    for i = 1:L
-        ap = i == 1 ? r : a(i - 1)
-        bp = i == 1 ? r : b(i - 1)
-        cp = i == 1 ? r : c(i - 1)
-        dp = i == 1 ? r : d(i - 1)
-        if i < L
-            rot[a(i)] =
-                i == 1 ? [a(2), b(2), b(1), r, d(1), d(2)] :
-                [a(i + 1), b(i + 1), b(i), ap, d(i), d(i + 1)]
-            rot[b(i)] =
-                i == 1 ? [b(2), c(1), r, a(1)] :
-                [b(i + 1), c(i), c(i - 1), bp, a(i - 1), a(i)]
-            rot[c(i)] =
-                i == 1 ? [c(2), d(2), d(1), r, b(1), b(2)] :
-                [c(i + 1), d(i + 1), d(i), cp, b(i), b(i + 1)]
-            rot[d(i)] =
-                i == 1 ? [d(2), a(1), r, c(1)] :
-                [d(i + 1), a(i), a(i - 1), dp, c(i - 1), c(i)]
-        else
-            rot[a(L)] = vcat([w(4q)], [w(j) for j = 1:q], [b(L), ap, d(L)])
-            rot[b(L)] = vcat([w(j) for j = q:2q], [c(L), c(L - 1), bp, a(L - 1), a(L)])
-            rot[c(L)] = vcat([w(j) for j = 2q:3q], [d(L), cp, b(L)])
-            rot[d(L)] = vcat([w(j) for j = 3q:4q], [a(L), a(L - 1), dp, c(L - 1), c(L)])
-        end
+# A triangulated tube of circumference 4 and length L whose last ring is fanned to
+# a rim of 4q vertices capped by one vertex; vertex 1 is the apex at the other end.
+# Once 4q is above about 8L most faces are beyond the last BFS levels, so every rung
+# of the ladder is light, and the fundamental cycle runs down the whole tube. The
+# rotations are written out: a triangulation has one embedding, but the BFS and the
+# dual tree, and with them the bug, depend on which one the rotation starts from.
+tube_ring(i, c) = i == 0 ? 1 : 1 + 4 * (i - 1) + mod1(c, 4)
+tube_rim(L, q, j) = 1 + 4L + mod1(j, 4q)
+
+# The rim vertices that ring vertex `c` of the last ring is joined to.
+tube_fan(L, q, c) = [tube_rim(L, q, j) for j = ((c-1)*q):(c*q)]
+
+# Counter-clockwise neighbours of ring vertex `c` of ring `i`: odd columns turn
+# one way, even columns the other; the entries beyond the last ring are the fan.
+function tube_ring_rotation(L, q, i, c)
+    up(col) = i < L ? [tube_ring(i + 1, col)] : Int[]
+    fan = i < L ? Int[] : tube_fan(L, q, c)
+    same(col) = tube_ring(i, col)
+    below(col) = i > 1 ? [tube_ring(i - 1, col)] : Int[]
+    prev = tube_ring(i - 1, c)
+    if isodd(c)
+        return vcat(up(c), fan, up(c + 1), same(c + 1), prev, same(c - 1), up(c - 1))
     end
-    corner =
-        Dict(q => (a(L), b(L)), 2q => (b(L), c(L)), 3q => (c(L), d(L)), 4q => (d(L), a(L)))
-    for j = 1:m
-        if haskey(corner, j)
-            X, Y = corner[j]
-            rot[w(j)] = [z, w(j + 1), Y, X, w(j - 1)]
-        else
-            X = j < q ? a(L) : j < 2q ? b(L) : j < 3q ? c(L) : d(L)
-            rot[w(j)] = [z, w(j + 1), X, w(j - 1)]
-        end
+    return vcat(up(c), fan, same(c + 1), below(c + 1), prev, below(c - 1), same(c - 1))
+end
+
+# The rim vertex `j`: the cap, the next rim vertex, the ring vertex or two it is
+# joined to, and the previous rim vertex.
+function tube_rim_rotation(L, q, j)
+    cap = 2 + 4L + 4q
+    c = (j - 1) ÷ q + 1
+    joined = j % q == 0 ? [tube_ring(L, c + 1), tube_ring(L, c)] : [tube_ring(L, c)]
+    return vcat(cap, tube_rim(L, q, j + 1), joined, tube_rim(L, q, j - 1))
+end
+
+function tube_blob(L, q)
+    cap = 2 + 4L + 4q
+    rot = [Int[] for _ = 1:cap]
+    rot[1] = [tube_ring(1, c) for c = 1:4]
+    for i = 1:L, c = 1:4
+        rot[tube_ring(i, c)] = tube_ring_rotation(L, q, i, c)
     end
-    rot[z] = zrev ? [w(j) for j = m:-1:1] : [w(j) for j = 1:m]
+    for j = 1:(4q)
+        rot[tube_rim(L, q, j)] = tube_rim_rotation(L, q, j)
+    end
+    rot[cap] = [tube_rim(L, q, j) for j = (4q):-1:1]
     return PlanarGraph(rot)
 end
