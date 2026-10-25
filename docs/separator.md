@@ -1,7 +1,7 @@
 # Separator: Lipton–Tarjan
 
 ```julia
-separator(g; balance = 2/3) -> (A, B, C)
+separator(g; balance = 2/3, weights = nothing) -> (A, B, C)
 ```
 
 Computes a balanced vertex separator of a planar graph in linear time, following
@@ -24,6 +24,29 @@ For `n = nv(g)` the three returned vectors:
 is what the theorem proves, so a smaller value cannot be promised. A larger
 value does not change the algorithm, it only lets the final pruning step move
 more separator vertices into `A` and `B`.
+
+## Weights
+
+`weights` is a vector with one nonnegative integer per vertex. Balance is then by
+weight: with total weight `W`, the weights of `A` and `B` are at most `balance * W`,
+and so is the weight of every component of `g - C`. The bound `|C| <= 2*sqrt(2n)`
+still counts vertices, not weight. Without `weights` every vertex weighs 1 and the
+result is identical to before.
+
+Lipton and Tarjan's proof carries over with three changes: the median level `l1` is
+where the prefix sum of the weights reaches `W/2` (the sizes `|L(l)|` and `k` that
+choose `l0` and `l2` still count vertices); the band is balanced by weight, and so
+is the search for the dual edge (the proof that a balanced edge exists only
+compares sums, so it is unchanged); and the packing and pruning steps add weights.
+A vertex heavier than `W/3`, or than a third of the weight of the component being
+cut, is returned alone as the separator: the rest of that component then weighs
+less than two thirds of it.
+
+Weights must be integers so that every comparison is exact and the incremental
+sums cannot drift; scale real weights first. The total may not exceed
+`typemax(Int) ÷ 3`. A wrong length, a negative or non-integer entry or a total
+above the limit is an `ArgumentError`. `separator_partition` has no weighted form:
+its parts are bounded in size, and a vertex heavier than `r` has no part to go to.
 
 The running time is `O(n)` in the worst case: no hashing, no comparison sorts,
 no data-dependent restarts (every loop is a pass over vertices, darts, triangles or

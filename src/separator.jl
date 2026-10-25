@@ -25,7 +25,7 @@
 const DEFAULT_BALANCE = 2 / 3
 
 """
-    separator(g; balance = 2/3) -> (A, B, C)
+    separator(g; balance = 2/3, weights = nothing) -> (A, B, C)
 
 Balanced vertex separator of the embedded planar graph `g`, computed by the
 Lipton-Tarjan algorithm in `O(nv(g))` time.
@@ -36,20 +36,52 @@ All three hold for every input, not only for well-behaved ones. `balance` must
 lie in `[2/3, 1)`: `2/3` is what the theorem guarantees, and a larger value only
 lets the final pruning step move more separator vertices into `A` and `B`.
 
+With `weights`, a vector of one nonnegative integer per vertex, "balanced" means by
+weight: the total weight of `A` and of `B` is at most `balance` times the total
+weight of `g`, and no edge joins `A` to `B`. The size bound `|C| <= 2*sqrt(2*nv(g))`
+still counts vertices. A vertex of weight above a third of the total (of its
+component, when that component is the one to cut) becomes the whole separator.
+Real weights must be scaled to integers first, so that the comparisons are exact; the
+total must stay below `typemax(Int) ÷ 3`. Without `weights` every vertex has weight 1.
+
 ```julia
 g = planar_grid(20, 20)
 A, B, C = separator(g)
 isempty(intersect(A, B))            # true
 length(C) <= 2 * sqrt(2 * nv(g))    # true
+
+w = [v <= 40 ? 100 : 1 for v = 1:nv(g)]      # a heavy corner of the grid
+A, B, C = separator(g; weights = w)
+max(sum(w[A]), sum(w[B])) <= 2 * sum(w) / 3     # true
 ```
 """
-function separator(g::PlanarGraph; balance::Real = DEFAULT_BALANCE)
+function separator(g::PlanarGraph; balance::Real = DEFAULT_BALANCE, weights = nothing)
     2 / 3 <= balance < 1 ||
         throw(ArgumentError("balance must lie in [2/3, 1), got $balance"))
     n = nv(g)
+    w = _vertex_weights(weights, n)
     n == 0 && return (Int[], Int[], Int[])
-    cap = max(floor(Int, balance * n), (2 * n) ÷ 3)
-    return _unpack(_best_partition(_planar_dart_graph(g), cap))
+    total = sum(w)
+    cap = max(floor(Int, balance * total), (2 * total) ÷ 3)
+    return _unpack(_best_partition(_planar_dart_graph(g), cap, w))
+end
+
+const _MAX_TOTAL_WEIGHT = typemax(Int) ÷ 3
+
+_vertex_weights(::Nothing, n::Integer) = fill(1, n)
+
+function _vertex_weights(weights::AbstractVector{<:Integer}, n::Integer)
+    length(weights) == n ||
+        throw(ArgumentError("weights has $(length(weights)) entries for $n vertices"))
+    all(x -> 0 <= x <= _MAX_TOTAL_WEIGHT, weights) ||
+        throw(ArgumentError("weights must be integers between 0 and $_MAX_TOTAL_WEIGHT"))
+    sum(Int128, weights; init = Int128(0)) <= _MAX_TOTAL_WEIGHT ||
+        throw(ArgumentError("the total weight must not exceed $_MAX_TOTAL_WEIGHT"))
+    return collect(Int, weights)
+end
+
+function _vertex_weights(::AbstractVector, ::Integer)
+    throw(ArgumentError("weights must be integers: scale real weights to integers"))
 end
 
 # The darts of `g`, after a check that every component is planarly embedded. The
@@ -65,14 +97,14 @@ end
 
 # Every root gives a valid separator; the smallest result after packing and
 # pruning wins. The number of roots is a constant, so the work stays linear.
-function _best_partition(dg::DartGraph, cap::Int)
+function _best_partition(dg::DartGraph, cap::Int, w::Vector{Int} = fill(1, dg.n))
     label, ncomps = component_labels(dg)
     candidates =
-        ncomps == 1 ? _connected_separators(dg) : _big_component_separators(dg, label)
+        ncomps == 1 ? _connected_separators(dg, w) : _big_component_separators(dg, label, w)
     best = Int8[]
     best_size = typemax(Int)
     for separator in candidates
-        side = _partition(dg, separator, cap)
+        side = _partition(dg, separator, cap, w)
         size = count(iszero, side)
         if size < best_size
             best = side
@@ -82,17 +114,17 @@ function _best_partition(dg::DartGraph, cap::Int)
     return best
 end
 
-# Only a component with more than `2n/3` vertices has to be cut; the others
+# Only a component of more than `2/3` of the total weight has to be cut; the others
 # already fit, and the packing step distributes them.
-function _big_component_separators(dg::DartGraph, label::Vector{Int})
+function _big_component_separators(dg::DartGraph, label::Vector{Int}, w::Vector{Int})
     sizes = zeros(Int, maximum(label))
-    for l in label
-        sizes[l] += 1
+    for (v, l) in enumerate(label)
+        sizes[l] += w[v]
     end
     big = argmax(sizes)
-    3 * sizes[big] <= 2 * dg.n && return [Int[]]
+    3 * sizes[big] <= 2 * sum(w) && return [Int[]]
     sub, ids = induced(dg, label .== big)
-    return [Int[ids[v] for v in sep] for sep in _connected_separators(sub)]
+    return [Int[ids[v] for v in sep] for sep in _connected_separators(sub, w[ids])]
 end
 
 function _unpack(side::Vector{Int8})
@@ -104,10 +136,12 @@ end
 # The level structure, and with it the size of the separator, depends on the
 # BFS root, so a few roots are tried: the endpoints and the midpoint of a BFS
 # pseudo-diameter, which is the centroid on tree-like graphs.
-function _connected_separators(dg::DartGraph)
+function _connected_separators(dg::DartGraph, w::Vector{Int})
     dg.n <= 2 && return [collect(1:dg.n)]
+    heavy = argmax(w)
+    3 * w[heavy] > sum(w) && return [[heavy]]
     tri = _triangles(dg)
-    return [_level_separator(dg, tri, root) for root in _root_candidates(dg)]
+    return [_level_separator(dg, tri, root, w) for root in _root_candidates(dg)]
 end
 
 function _root_candidates(dg::DartGraph)
@@ -155,33 +189,36 @@ end
 
 # Theorem 4: the vertices of levels `l0` and `l2`, plus the band vertices of a
 # balanced cycle when the band between them is larger than `2n/3`.
-function _level_separator(dg::DartGraph, tri, root::Int)
+function _level_separator(dg::DartGraph, tri, root::Int, w::Vector{Int})
     n = dg.n
     tree = _bfs(dg, root)
-    l0, l2 = _level_plan(_level_counts(tree.depth), n)
+    counts = _level_counts(tree.depth)
+    l0, l2 = _level_plan(counts, _level_counts(tree.depth, w), n, sum(w))
     base = Int[v for v = 1:n if tree.depth[v] == l0 || tree.depth[v] == l2]
     band = BitVector(l0 < tree.depth[v] < l2 for v = 1:n)
-    width = count(band)
-    3 * width <= 2 * n && return base
-    return vcat(base, _band_cycle(dg, tri, tree, band, width))
+    width = sum(w[band])
+    3 * width <= 2 * sum(w) && return base
+    return vcat(base, _band_cycle(dg, tri, tree, band, w))
 end
 
 # --- level bookkeeping ---------------------------------------------------
 
-# counts[l + 1] = number of vertices on BFS level l.
-function _level_counts(depth::Vector{Int})
+# counts[l + 1] = total weight of the vertices on BFS level l: their number when
+# every weight is 1.
+function _level_counts(depth::Vector{Int}, w::Vector{Int} = fill(1, length(depth)))
     counts = zeros(Int, maximum(depth) + 1)
-    for lv in depth
-        counts[lv+1] += 1
+    for (v, lv) in enumerate(depth)
+        counts[lv+1] += w[v]
     end
     return counts
 end
 
-# Levels l0 and l2 of Theorem 4. Level `l1` is where the prefix sum first
-# reaches `n/2`, so the levels below `l0` and above `l2` each hold at most half
-# of the vertices.
-function _level_plan(counts::Vector{Int}, n::Int)
-    l1 = _middle_level(counts, n)
+# Levels l0 and l2 of Theorem 4. Level `l1` is where the prefix sum of the weights
+# `wcounts` first reaches half of `total`, so the levels below `l0` and above `l2`
+# each hold at most half of the weight. The sizes `|L(l)|` and `k` count vertices,
+# which is what bounds the separator.
+function _level_plan(counts::Vector{Int}, wcounts::Vector{Int}, n::Int, total::Int)
+    l1 = _middle_level(wcounts, total)
     k = sum(view(counts, 1:(l1+1)))
     return _lower_level(counts, l1, k), _upper_level(counts, l1, n - k)
 end
@@ -350,8 +387,8 @@ end
 
 # The triangles of a region of the dual tree, as seen by the band vertices: how
 # many triangles of each vertex lie in the region. A vertex is strictly inside
-# when all its triangles do (`full`), and outside when none does. Stamps make a
-# reset free.
+# when all its triangles do (`full`), and outside when none does; `full` and
+# `touched` are total weights. Stamps make a reset free.
 mutable struct _Region
     count::Vector{Int}
     stamp::Vector{Int}
@@ -369,23 +406,23 @@ function _reset!(r::_Region)
     return r
 end
 
-function _enter!(r::_Region, v::Int, deg::Vector{Int})
+function _enter!(r::_Region, v::Int, deg::Vector{Int}, w::Vector{Int})
     if r.stamp[v] != r.epoch
         r.stamp[v] = r.epoch
         r.count[v] = 0
     end
     c = r.count[v] + 1
     r.count[v] = c
-    c == 1 && (r.touched += 1)
-    c == deg[v] && (r.full += 1)
+    c == 1 && (r.touched += w[v])
+    c == deg[v] && (r.full += w[v])
     return nothing
 end
 
-function _leave!(r::_Region, v::Int, deg::Vector{Int})
+function _leave!(r::_Region, v::Int, deg::Vector{Int}, w::Vector{Int})
     c = r.count[v]
-    c == deg[v] && (r.full -= 1)
+    c == deg[v] && (r.full -= w[v])
     r.count[v] = c - 1
-    c == 1 && (r.touched -= 1)
+    c == 1 && (r.touched -= w[v])
     return nothing
 end
 
@@ -393,6 +430,7 @@ mutable struct _Search
     tri::_Triangles
     dual::_Dual
     band::BitVector
+    weight::Vector{Int}
     width::Int
     parent::Vector{Int}
     size::Vector{Int}
@@ -403,7 +441,7 @@ end
 
 function _apply_triangle!(op, r::_Region, s::_Search, t::Int)
     for v in (s.tri.va[t], s.tri.vb[t], s.tri.vc[t])
-        (v != 0 && s.band[v]) && op(r, v, s.tri.deg)
+        (v != 0 && s.band[v]) && op(r, v, s.tri.deg, s.weight)
     end
     return nothing
 end
@@ -448,11 +486,21 @@ end
 
 # Band vertices on the fundamental cycle of the balanced dual edge, that is on
 # the BFS tree path between the endpoints `p` and `q`.
-function _band_cycle(dg::DartGraph, tri::_Triangles, tree, band::BitVector, width::Int)
+function _band_cycle(dg::DartGraph, tri::_Triangles, tree, band::BitVector, w::Vector{Int})
     dual = _dual_tree(dg, tri, tree.parent_dart)
     parent, size = _root_dual(dual, tri.ntri)
-    search =
-        _Search(tri, dual, band, width, parent, size, Int[], _Region(dg.n), _Region(dg.n))
+    search = _Search(
+        tri,
+        dual,
+        band,
+        w,
+        sum(w[band]),
+        parent,
+        size,
+        Int[],
+        _Region(dg.n),
+        _Region(dg.n),
+    )
     e = _search_edge(search)
     return _band_path(tree, band, dual.ep[e], dual.eq[e])
 end
@@ -473,7 +521,7 @@ function _band_path(tree, band::BitVector, p::Int, q::Int)
     return path
 end
 
-# A dual edge is balanced when at most `2/3` of the band vertices lie strictly
+# A dual edge is balanced when at most `2/3` of the band weight lies strictly
 # on either side. Exactly one side can hold more than `2/3`, so every bad edge
 # points at its heavy side. Walk down the dual tree from the root along the
 # edges whose heavy side is below; at the end of the walk every incident bad
@@ -545,20 +593,24 @@ end
 
 # --- packing the components and pruning the separator ---------------------
 
-# `side[v]`: 0 for the separator, 1 for `A`, 2 for `B`.
-function _partition(dg::DartGraph, separator::Vector{Int}, cap::Int)
-    comp, sizes = _components_without(dg, separator)
-    bins = _bins(sizes, dg.n)
+# `side[v]`: 0 for the separator, 1 for `A`, 2 for `B`. Sides and `cap` are
+# measured in weight.
+function _partition(dg::DartGraph, separator::Vector{Int}, cap::Int, w::Vector{Int})
+    comp, sizes = _components_without(dg, separator, w)
+    bins = _bins(sizes, sum(w))
     side = Int8[c == 0 ? Int8(0) : bins[c] for c in comp]
-    _prune!(dg, side, cap)
-    max(count(==(1), side), count(==(2), side)) <= cap ||
-        error("internal error: the separator leaves a side above $cap vertices")
+    _prune!(dg, side, cap, w)
+    max(_side_weight(side, w, 1), _side_weight(side, w, 2)) <= cap ||
+        error("internal error: the separator leaves a side above weight $cap")
     return side
 end
 
+_side_weight(side::Vector{Int8}, w::Vector{Int}, s::Int) =
+    sum(w[v] for v in eachindex(side) if side[v] == s; init = 0)
+
 # Component labels of the graph without `separator` (0 on the separator) and
-# the component sizes.
-function _components_without(dg::DartGraph, separator::Vector{Int})
+# the component weights.
+function _components_without(dg::DartGraph, separator::Vector{Int}, w::Vector{Int})
     comp = zeros(Int, dg.n)
     for v in separator
         comp[v] = -1
@@ -567,7 +619,7 @@ function _components_without(dg::DartGraph, separator::Vector{Int})
     stack = Int[]
     for s = 1:dg.n
         comp[s] == 0 || continue
-        push!(sizes, _flood!(comp, stack, dg, s, length(sizes) + 1))
+        push!(sizes, _flood!(comp, stack, dg, s => length(sizes) + 1, w))
     end
     for v in separator
         comp[v] = 0
@@ -575,32 +627,40 @@ function _components_without(dg::DartGraph, separator::Vector{Int})
     return comp, sizes
 end
 
-function _flood!(comp::Vector{Int}, stack::Vector{Int}, dg::DartGraph, s::Int, id::Int)
+function _flood!(
+    comp::Vector{Int},
+    stack::Vector{Int},
+    dg::DartGraph,
+    seed::Pair{Int,Int},
+    w::Vector{Int},
+)
+    s, id = seed
     comp[s] = id
     push!(stack, s)
     size = 0
     while !isempty(stack)
         v = pop!(stack)
-        size += 1
+        size += w[v]
         for d in incident_darts(dg, v)
-            w = dg.head[d]
-            comp[w] == 0 || continue
-            comp[w] = id
-            push!(stack, w)
+            u = dg.head[d]
+            comp[u] == 0 || continue
+            comp[u] = id
+            push!(stack, u)
         end
     end
     return size
 end
 
-# Two bins, each of at most `2n/3` vertices, for components that are all at most
-# `2n/3`: a component of at least `n/3` goes alone into the first bin and the
-# rest into the second; otherwise components fill the first bin until it passes
-# `n/3`, which leaves it below `2n/3`, and the second bin has the rest.
-function _bins(sizes::Vector{Int}, n::Int)
+# Two bins, each of at most `2/3` of the total weight `total`, for components that
+# are all at most `2/3` of it: a component of at least `total/3` goes alone into the
+# first bin and the rest into the second; otherwise components fill the first bin
+# until it passes `total/3`, which leaves it below `2/3`, and the second bin has the
+# rest.
+function _bins(sizes::Vector{Int}, total::Int)
     bins = fill(Int8(2), length(sizes))
     isempty(sizes) && return bins
     big = argmax(sizes)
-    if 3 * sizes[big] >= n
+    if 3 * sizes[big] >= total
         bins[big] = 1
         return bins
     end
@@ -608,28 +668,28 @@ function _bins(sizes::Vector{Int}, n::Int)
     for c in eachindex(sizes)
         bins[c] = 1
         cum += sizes[c]
-        3 * cum > n && break
+        3 * cum > total && break
     end
     return bins
 end
 
 # A separator vertex with no neighbour in one side can join the other side,
-# while that side stays within `cap`. One pass reaches a fixed point, because a
-# vertex that joins a side can only block, never free, the others.
-function _prune!(dg::DartGraph, side::Vector{Int8}, cap::Int)
-    sa = count(==(1), side)
-    sb = count(==(2), side)
+# while that side stays within the weight `cap`. One pass reaches a fixed point,
+# because a vertex that joins a side can only block, never free, the others.
+function _prune!(dg::DartGraph, side::Vector{Int8}, cap::Int, w::Vector{Int})
+    sa = _side_weight(side, w, 1)
+    sb = _side_weight(side, w, 2)
     for v = 1:dg.n
         side[v] == 0 || continue
         has_a, has_b = _neighbor_sides(dg, side, v)
-        can_a = !has_b && sa < cap
-        can_b = !has_a && sb < cap
+        can_a = !has_b && sa + w[v] <= cap
+        can_b = !has_a && sb + w[v] <= cap
         if can_a && (!can_b || sa <= sb)
             side[v] = 1
-            sa += 1
+            sa += w[v]
         elseif can_b
             side[v] = 2
-            sb += 1
+            sb += w[v]
         end
     end
     return side

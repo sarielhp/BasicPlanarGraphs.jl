@@ -203,3 +203,112 @@ end
         check_separator(g, A, B, C)
     end
 end
+
+# Balance by weight, checked with Graphs.jl only: the weights of `A` and `B`, and of
+# every component of the graph without `C`, are at most `balance` of the total.
+function check_weighted_separator(g, (A, B, C), w; balance = 2 / 3)
+    n = nv(g)
+    @test sort(vcat(A, B, C)) == collect(1:n)
+    side = zeros(Int8, n)
+    side[A] .= 1
+    side[B] .= 2
+    side[C] .= 3
+    @test all(
+        e -> !(side[src(e)] + side[dst(e)] == 3 && side[src(e)] * side[dst(e)] == 2),
+        edges(g),
+    )
+    @test max(sum(w[A]; init = 0), sum(w[B]; init = 0)) <= balance * sum(w)
+    @test length(C) <= 2 * sqrt(2 * n)
+    keep = trues(n)
+    keep[C] .= false
+    sub, ids = induced_subgraph(g.graph, findall(keep))
+    for comp in connected_components(sub)
+        @test sum(w[ids[comp]]) <= balance * sum(w)
+    end
+    return nothing
+end
+
+@testset "weighted separator" begin
+    @testset "unit weights change nothing" begin
+        for g in (planar_grid(12, 12), random_triangulation(200; rng = MersenneTwister(3)))
+            @test separator(g; weights = ones(Int, nv(g))) == separator(g)
+            @test separator(g; weights = fill(UInt8(1), nv(g))) == separator(g)
+            @test separator(g; weights = ones(Int32, nv(g)), balance = 0.8) ==
+                  separator(g; balance = 0.8)
+        end
+    end
+
+    @testset "random weights" begin
+        rng = MersenneTwister(21)
+        graphs = PlanarGraph[
+            planar_grid(15, 15),
+            planar_wheel(40),
+            planar_path(60),
+            disjoint_union(planar_grid(6, 6), planar_wheel(9), planar_cycle(5)),
+        ]
+        for n in (5, 20, 100, 500), seed = 1:3
+            g = random_triangulation(n; rng = MersenneTwister(seed))
+            push!(graphs, g)
+            push!(graphs, thin_out(g, 0.5, MersenneTwister(seed)))
+        end
+        for g in graphs, trial = 1:4
+            w = rand(rng, trial == 1 ? (0:1) : trial == 2 ? (0:50) : (0:1000), nv(g))
+            sum(w) == 0 && (w[1] = 1)
+            A, B, C = separator(g; weights = w)
+            check_weighted_separator(g, (A, B, C), w)
+        end
+    end
+
+    @testset "weight concentrated in a corner" begin
+        g = planar_grid(20, 20)
+        w = [v <= 30 ? 500 : 1 for v = 1:nv(g)]
+        A, B, C = separator(g; weights = w)
+        check_weighted_separator(g, (A, B, C), w)
+        # the unweighted separator is not balanced for these weights
+        A0, B0, _ = separator(g)
+        @test max(sum(w[A0]), sum(w[B0])) > 2 * sum(w) / 3
+        for balance in (0.75, 0.9)
+            A, B, C = separator(g; weights = w, balance)
+            check_weighted_separator(g, (A, B, C), w; balance)
+        end
+    end
+
+    @testset "heavy vertices" begin
+        g = planar_grid(8, 8)
+        w = ones(Int, nv(g))
+        w[19] = 1000
+        @test separator(g; weights = w)[3] == [19]
+        w[40] = 800
+        A, B, C = separator(g; weights = w)
+        @test C == [19]
+        check_weighted_separator(g, (A, B, C), w)
+        # a heavy vertex in a small component of a disconnected graph
+        d = disjoint_union(planar_grid(10, 10), planar_wheel(6))
+        w = ones(Int, nv(d))
+        w[nv(d)] = 400
+        A, B, C = separator(d; weights = w)
+        check_weighted_separator(d, (A, B, C), w)
+        # one vertex of weight above two thirds, in a graph of two vertices
+        A, B, C = separator(planar_path(2); weights = [5, 1])
+        @test sort(vcat(A, B, C)) == [1, 2]
+        @test 1 in C
+    end
+
+    @testset "zero and tiny cases" begin
+        g = planar_grid(5, 5)
+        A, B, C = separator(g; weights = zeros(Int, nv(g)))
+        check_weighted_separator(g, (A, B, C), zeros(Int, nv(g)))
+        @test separator(PlanarGraph([Int[]]); weights = [3]) == (Int[], Int[], [1])
+        @test separator(PlanarGraph(Vector{Int}[]); weights = Int[]) ==
+              (Int[], Int[], Int[])
+    end
+
+    @testset "weights are validated" begin
+        g = planar_grid(4, 4)
+        @test_throws ArgumentError separator(g; weights = ones(Int, 15))
+        @test_throws ArgumentError separator(g; weights = fill(-1, 16))
+        @test_throws ArgumentError separator(g; weights = ones(16))
+        @test_throws ArgumentError separator(g; weights = fill(typemax(Int) ÷ 4, 16))
+        @test_throws ArgumentError separator(g; weights = fill(typemax(UInt64), 16))
+    end
+end

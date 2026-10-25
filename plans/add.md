@@ -1,12 +1,18 @@
 # Possible additions
 
-Status: proposals, nothing implemented. Written 2026-10-24 after the v0.2.4 release,
+Status: 1 (five-coloring, v0.2.6) and 2 (weighted `separator`; not
+`separator_partition`) are done; the rest are proposals. Written 2026-10-24 after the v0.2.4 release,
 while the independent review of the separator, cycle separator and triangulation
 code was still open; revisit after its findings are fixed.
 
 The maintainer's pick so far: **5-coloring** (below). The rest are candidates.
 
-## 1. Five-coloring (maintainer's request)
+## 1. Five-coloring (maintainer's request) — done in v0.2.6
+
+Deviations from the plan below: no planarity pre-check (it cost ten times the
+coloring); `ArgumentError` only when the method gets stuck; hash-set adjacency with
+small-to-large merging, near linear in practice but not proved linear; no Kempe-chain
+oracle. The paper's linked-list scheme is the way to a proof.
 
 `five_coloring(g) -> Vector{Int}`: a proper vertex coloring of a planar graph with
 colors `1:5`, in `O(n)` time. (Six colors is the trivial degeneracy bound; four is
@@ -51,7 +57,11 @@ throws `ArgumentError`).
   `is_proper_coloring(g, colors)` as a public validator. Recommended: yes to the
   validator, it makes the tests and users' checks trivial.
 
-## 2. Weighted separators
+## 2. Weighted separators — `separator` done, `separator_partition` not
+
+`separator(g; weights)` is implemented (integer weights, see `docs/separator.md`).
+A weighted `separator_partition` is left out: a vertex heavier than `r` fits no part,
+so its size bounds would need a different statement.
 
 Optional vertex weights for `separator` and `separator_partition`, so that
 "balanced" means by weight. Lipton–Tarjan handles weights directly; the exact

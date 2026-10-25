@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `separator(g; weights = w)`: balance by vertex weight (nonnegative integers). The
+  weights of both sides and of every component of `g - C` are at most `balance` of
+  the total; `|C| <= 2*sqrt(2n)` still counts vertices. Results without `weights`
+  are unchanged (checked on 63 fixed cases). `separator_partition` stays unweighted.
+
 ## [0.2.6] - 2026-10-25
 
 ### Added

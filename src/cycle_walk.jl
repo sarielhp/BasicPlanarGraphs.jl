@@ -162,6 +162,7 @@ function _balanced_walk(dg::DartGraph)
         tri,
         dual,
         trues(dg.n),
+        fill(1, dg.n),
         dg.n,
         parent,
         size,

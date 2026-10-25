@@ -123,7 +123,7 @@ isolated and the components are triangulated separately.
 
 ## Separator
 
-### `separator(g; balance = 2/3) -> (A, B, C)`
+### `separator(g; balance = 2/3, weights = nothing) -> (A, B, C)`
 
 Vertex separator `C` with sides `A` and `B`:
 
@@ -135,7 +135,9 @@ Vertex separator `C` with sides `A` and `B`:
 Both bounds hold for every input, and the running time is `O(nv(g))` in the worst
 case. `balance` must be in `[2/3, 1)`; otherwise `ArgumentError`, as for a
 rotation system that is not a planar embedding. Deterministic for a given graph.
-See [Separator](separator.md).
+`weights` (one nonnegative integer per vertex) balances by weight instead of count:
+`A`, `B` and every component of `g - C` weigh at most `balance` of the total, and
+`|C| <= 2*sqrt(2 nv(g))` still counts vertices. See [Separator](separator.md).
 
 ## Separator partition
 
