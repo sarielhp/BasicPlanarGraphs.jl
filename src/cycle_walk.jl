@@ -12,26 +12,33 @@
 # --- walks of the input graph --------------------------------------------
 
 # The directed darts of the closed walk `cyc`, or `nothing` when two
-# consecutive vertices are not adjacent.
+# consecutive vertices are not adjacent. Each step scans the darts of the end
+# of smaller degree, so a walk that returns to a hub many times does not rescan
+# the hub: the cost is the sum over the steps of the smaller degree, which is
+# `O(n)` when each edge occurs `O(1)` times in the walk (Chiba and Nishizeki),
+# as in every walk this package produces.
 function _cycle_darts(g::DartGraph, cyc::AbstractVector{Int})
     k = length(cyc)
     k >= 3 || return nothing
     darts = Vector{Int}(undef, k)
     for i = 1:k
-        a = cyc[i]
-        b = cyc[mod1(i+1, k)]
-        d = 0
-        for x in incident_darts(g, a)
-            if g.head[x] == b
-                d = x
-                break
-            end
-        end
+        d = _dart_between(g, cyc[i], cyc[mod1(i+1, k)])
         d == 0 && return nothing
         darts[i] = d
     end
     return darts
 end
+
+# The dart `a -> b`, or 0 when `a` and `b` are not adjacent.
+function _dart_between(g::DartGraph, a::Int, b::Int)
+    g.deg[b] < g.deg[a] && return _twin_or_zero(g, _dart_between(g, b, a))
+    for x in incident_darts(g, a)
+        g.head[x] == b && return x
+    end
+    return 0
+end
+
+_twin_or_zero(g::DartGraph, d::Int) = d == 0 ? 0 : g.twin[d]
 
 function _cycle_edge_mask(g::DartGraph, cyc::AbstractVector{Int})
     darts = _cycle_darts(g, cyc)

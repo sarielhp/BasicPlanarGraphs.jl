@@ -1,16 +1,6 @@
 # The algorithm is linear, so quadrupling the number of vertices must not blow
 # the running time up. Generous factors keep this stable on loaded machines.
 
-# The fastest of several runs after a warm-up, with a garbage collection before
-# each, so that a pause or a busy core does not decide the comparison.
-function fastest(f, g; repeats = 5)
-    f(g)
-    return minimum(begin
-        GC.gc()
-        @elapsed f(g)
-    end for _ = 1:repeats)
-end
-
 measure(g) = fastest(separator, g)
 
 @testset "linear scaling" begin

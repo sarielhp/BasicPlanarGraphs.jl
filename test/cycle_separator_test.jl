@@ -168,3 +168,29 @@ end
         end
     end
 end
+
+@testset "walks that return to a hub many times" begin
+    # The darts of a walk used to be found by rescanning the hub at every visit:
+    # a star, and triangles around one vertex, took quadratic time.
+    star(k) = PlanarGraph(vcat([collect(2:k)], [[1] for _ = 2:k]))
+    windmill(k) = begin
+        rot = [Int[] for _ = 1:(2k+1)]
+        for i = 1:k
+            a, b = 2i, 2i + 1
+            append!(rot[1], (a, b))
+            rot[a] = [1, b]
+            rot[b] = [a, 1]
+        end
+        PlanarGraph(rot)
+    end
+    for make in (star, windmill)
+        for k in (6, 7, 50)
+            g = make(k)
+            c = cycle_separator(g)
+            inside, outside = cycle_sides(g, c)
+            @test max(length(inside), length(outside)) <= 2nv(g) / 3
+        end
+        small, large = make(2_000), make(32_000)
+        @test fastest(cycle_separator, large) <= 80 * fastest(cycle_separator, small) + 0.05
+    end
+end

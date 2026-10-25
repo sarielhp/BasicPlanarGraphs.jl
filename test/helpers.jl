@@ -21,3 +21,13 @@ function thin_out(g::PlanarGraph, p::Real, rng)
     rot = rotation(g)
     return PlanarGraph([Int[w for w in rot[v] if kept(v, w)] for v = 1:nv(g)])
 end
+
+# The fastest of several runs after a warm-up, with a garbage collection before
+# each, so that a pause or a busy core does not decide the comparison.
+function fastest(f, g; repeats = 5)
+    f(g)
+    return minimum(begin
+        GC.gc()
+        @elapsed f(g)
+    end for _ = 1:repeats)
+end

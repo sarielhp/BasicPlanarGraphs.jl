@@ -28,7 +28,12 @@ that
 4. if every face of `g` is a triangle, `C` is a **simple cycle** with `O(sqrt(n))`
    vertices. For other graphs its length is not bounded.
 
-The result is deterministic, and the running time is `O(nv)` in the worst case.
+The result is deterministic, and the running time is `O(nv)` in the worst case. The
+walk is turned into darts by scanning, for each step, the darts of the end of
+smaller degree; with each edge used `O(1)` times, as in every walk this package
+produces, that sum is `O(nv)` (Chiba and Nishizeki). `cycle_sides` of a walk
+supplied by the caller costs that sum plus `O(nv + L)`, which is larger when the
+walk uses one edge between two high-degree vertices many times.
 
 ## Orientation
 
@@ -42,8 +47,9 @@ For a walk that repeats vertices and edges, left and right come from winding
 numbers: crossing an edge from its right to its left changes a face's number by
 the times the walk uses the edge forward minus backward, so an edge used both ways
 (a spike of the walk) can be crossed freely. The faces get two adjacent values,
-the larger on the left; a walk with three values crosses itself and is rejected
-with an `ArgumentError`, as is a vertex sequence that is not a closed walk of `g`.
+the larger on the left; a walk whose faces get more than two values (it crosses itself, goes around
+twice, or touches itself with opposite orientations) is rejected with an
+`ArgumentError`, as is a vertex sequence that is not a closed walk of `g`.
 
 ```julia
 g = planar_grid(20, 20)

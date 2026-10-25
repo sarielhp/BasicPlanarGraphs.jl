@@ -67,7 +67,9 @@ two results; neither side is privileged beyond this convention.
 `cycle` must be a sequence of at least three vertices of `g` whose consecutive
 entries, including the last and the first, are adjacent, and which may repeat
 vertices and edges (as the result of [`cycle_separator`](@ref) may); otherwise,
-or when the walk crosses itself, an `ArgumentError` is raised. Vertices of the
+or when the faces get more than two winding values (the walk crosses itself,
+goes around twice, or touches itself with opposite orientations), an
+`ArgumentError` is raised. Vertices of the
 walk itself are in neither result, and both vectors are sorted ascending.
 
 ```julia
