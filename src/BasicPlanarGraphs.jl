@@ -1,7 +1,18 @@
 module BasicPlanarGraphs
 
 using Graphs:
-    Graphs, SimpleGraph, degree, dst, edges, has_edge, ne, neighbors, nv, src, vertices
+    Graphs,
+    AbstractGraph,
+    SimpleGraph,
+    degree,
+    dst,
+    edges,
+    has_edge,
+    ne,
+    neighbors,
+    nv,
+    src,
+    vertices
 import Graphs: is_planar
 using Random: Random
 

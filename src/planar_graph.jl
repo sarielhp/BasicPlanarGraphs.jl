@@ -34,8 +34,10 @@ struct PlanarGraph{T<:Integer}
     end
 end
 
+# The graph is copied, so changing the argument later cannot break the invariant
+# that `graph` and `rotation` describe the same edges.
 function PlanarGraph(graph::SimpleGraph{T}, rotation::AbstractVector) where {T<:Integer}
-    return PlanarGraph{T}(graph, _convert_rotation(rotation, T))
+    return PlanarGraph{T}(copy(graph), _convert_rotation(rotation, T))
 end
 
 function PlanarGraph(rotation::AbstractVector)
@@ -175,10 +177,10 @@ Boundary walks of the faces of the embedding. Vertices on a bridge or a cut
 vertex occur more than once in a walk; the number of walks is the number of
 faces.
 """
-function faces(g::PlanarGraph)
+function faces(g::PlanarGraph{T}) where {T}
     dg = DartGraph(g)
     orbits, _ = face_orbits(dg)
-    return [[tail(dg, d) for d in orbit] for orbit in orbits]
+    return [T[tail(dg, d) for d in orbit] for orbit in orbits]
 end
 
 """
@@ -254,6 +256,17 @@ function DartGraph(g::PlanarGraph)
     end
     _match_pending_twins!(dg)
     return dg
+end
+
+# The embedding of `g` with the vertex type `T`; `g` itself when it has it already.
+_retype(::Type{T}, g::PlanarGraph{T}) where {T<:Integer} = g
+
+function _retype(::Type{T}, g::PlanarGraph) where {T<:Integer}
+    graph = SimpleGraph{T}(nv(g))
+    for e in edges(g.graph)
+        Graphs.add_edge!(graph, T(src(e)), T(dst(e)))
+    end
+    return PlanarGraph(graph, g.rotation)
 end
 
 function PlanarGraph(dg::DartGraph)

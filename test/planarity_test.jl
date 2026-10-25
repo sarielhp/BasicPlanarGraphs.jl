@@ -243,3 +243,26 @@ end
         @test is_planar(large)
     end
 end
+
+@testset "vertex type and graph kinds" begin
+    g32 = SimpleGraph{Int32}(4)
+    for (u, v) in ((1, 2), (2, 3), (3, 4), (4, 1))
+        add_edge!(g32, u, v)
+    end
+    e = planar_embedding(g32)
+    @test e isa PlanarGraph{Int32}
+    @test is_planar_embedding(e)
+    # A rotation that is not planar is recomputed, and keeps its vertex type.
+    k4 = PlanarGraph(Vector{Int32}[[2, 3, 4], [1, 3, 4], [1, 2, 4], [1, 2, 3]])
+    @test !is_planar_embedding(k4)
+    @test planar_embedding(k4) isa PlanarGraph{Int32}
+    @test faces(k4) isa Vector{Vector{Int32}}
+    t = triangulate(e)
+    @test t isa PlanarGraph{Int32}
+    @test ne(t) == 6
+
+    # Directed graphs have no embedding here: ArgumentError, not MethodError.
+    digraph = SimpleDiGraph(path_graph(4))
+    @test_throws ArgumentError planar_embedding(digraph)
+    @test_throws ArgumentError is_planar_linear(digraph)
+end

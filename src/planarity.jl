@@ -654,15 +654,21 @@ satisfies Euler's formula on every component, so it can be passed to
 [`separator`](@ref), [`triangulate`](@ref) and [`grid_drawing`](@ref).
 
 For a `PlanarGraph` whose stored rotation is not planar, the embedding is
-recomputed from the underlying graph. Vertices keep their labels.
+recomputed from the underlying graph. The result has the vertex type of `g`, and
+the vertices keep their numbers.
 """
 function planar_embedding(g::SimpleGraph)
     rotation = _rotation_system(_adjacency(g))
     rotation === nothing && return nothing
-    return PlanarGraph(rotation)
+    return PlanarGraph(g, rotation)
 end
 
 function planar_embedding(g::PlanarGraph)
     is_planar_embedding(g) && return g
     return planar_embedding(g.graph)
 end
+
+# Directed graphs and other `Graphs.jl` types have no embedding in this package.
+const _UNDIRECTED_ONLY = "an undirected SimpleGraph or a PlanarGraph is required"
+planar_embedding(g::AbstractGraph) = throw(ArgumentError(_UNDIRECTED_ONLY))
+is_planar_linear(g::AbstractGraph) = throw(ArgumentError(_UNDIRECTED_ONLY))

@@ -58,9 +58,9 @@ corrupted, and it is. Use `is_planar_linear` at that size; keep `is_planar` for
 interchange. The two agree on every graph small enough for both (the tests check
 random graphs, the generators, and the classical obstructions).
 
-Both read adjacency only. For a `PlanarGraph` they answer about the graph and
-ignore the stored rotation, so a broken embedding still yields the correct
-verdict:
+Both answer about the graph, not about a stored rotation. For a `PlanarGraph`
+`planar_embedding` returns a stored rotation that is already planar as it is and
+recomputes a broken one, so a broken embedding still yields the correct verdict:
 
 ```julia
 k4 = PlanarGraph([[2, 3, 4], [1, 3, 4], [1, 2, 4], [1, 2, 3]])
@@ -81,7 +81,8 @@ counter-clockwise order of the neighbours.
   [`grid_drawing`](drawing.md).
 - A non-planar graph gives `nothing`; nothing is thrown, so `nothing` can be
   tested directly.
-- Vertex labels are preserved, and the element type follows the input.
+- Vertices keep their numbers, and the result has the vertex type of the input
+  (`PlanarGraph{Int32}` in, `PlanarGraph{Int32}` out).
 - Disconnected graphs are handled one component at a time.
 - The answer is deterministic: the same graph always gives the same rotation
   system, because the DFS visits neighbours in the order the graph stores them.

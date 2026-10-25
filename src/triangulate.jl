@@ -45,7 +45,9 @@ function triangulate(g::DartGraph)
     return h
 end
 
-triangulate(g::PlanarGraph) = PlanarGraph(triangulate(DartGraph(g)))
+function triangulate(g::PlanarGraph{T}) where {T}
+    return _retype(T, PlanarGraph(triangulate(DartGraph(g))))
+end
 
 function _add_chords!(h::DartGraph)
     euler_holds(h) || throw(
