@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `separator_partition(g, r; weights = w)`: parts bounded by weight (see
+  `docs/partition.md`). Without `weights` the result is unchanged.
+- `add_edge_in_face!` joins two components when the corners share no face because the
+  vertices are in different components.
+
+### Fixed
+
+- `cycle_sides` with a non-integer vector (for example `Float64`) threw a `MethodError`;
+  it throws `ArgumentError` now.
+- The `triangulate` test compared rotations up to reversal; it now requires the same
+  direction, which `triangulate` preserves.
+
 ## [0.2.8] - 2026-10-25
 
 ### Added

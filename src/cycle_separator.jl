@@ -97,6 +97,14 @@ function cycle_sides(g::PlanarGraph, cycle::AbstractVector{<:Integer})
     return sides
 end
 
+function cycle_sides(::PlanarGraph, cycle::AbstractVector)
+    throw(
+        ArgumentError(
+            "the cycle must be a vector of integer vertices, got $(typeof(cycle))",
+        ),
+    )
+end
+
 # --- the pipeline ---------------------------------------------------------
 
 function _cycle_separator(g::DartGraph; delta::Union{Nothing,Int} = nothing)

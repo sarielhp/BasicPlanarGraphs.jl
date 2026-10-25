@@ -109,6 +109,8 @@ end
         @test cycle_sides(g, reverse(C)) == (outside, inside)
         @test cycle_sides(g, collect(C)) == (inside, outside)
         @test cycle_sides(g, Int32.(C)) == (inside, outside)
+        @test_throws ArgumentError cycle_sides(g, Float64.(C))
+        @test_throws ArgumentError cycle_sides(g, Any[])
     end
 
     @testset "cycle_sides validation" begin

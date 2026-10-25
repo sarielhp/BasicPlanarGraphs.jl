@@ -85,7 +85,7 @@ is again a planar embedding. Vertex numbers never change.
 |---|---|
 | `delete_edge!(g, u, v)` | removes `uv`; the other edges keep their cyclic order. `Graphs.rem_edge!` does the same and returns a `Bool`. |
 | `contract_edge!(g, u, v)` | merges `v` into `u`: the neighbours of `v` take the place of `v` in the rotation of `u`; a common neighbour would get two parallel edges, one is dropped. `v` stays as an isolated vertex. |
-| `add_edge_in_face!(g, u, v; after_u, after_v)` | adds `uv` into the corner after the neighbour `after_u` at `u` and after `after_v` at `v`; both corners must lie on one face, which is checked by walking it. |
+| `add_edge_in_face!(g, u, v; after_u, after_v)` | adds `uv` into the corner after the neighbour `after_u` at `u` and after `after_v` at `v`; both corners must lie on one face, which is checked by walking it; when `u` and `v` are in different components any corners do and the edge joins them. |
 
 Each costs `O(degree)` of the vertices it touches, plus a scan of the rotation of each
 neighbour of `v` for a contraction and a walk along the face for an insertion.

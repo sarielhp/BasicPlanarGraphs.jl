@@ -45,8 +45,8 @@ less than two thirds of it.
 Weights must be integers so that every comparison is exact and the incremental
 sums cannot drift; scale real weights first. The total may not exceed
 `typemax(Int) ÷ 3`. A wrong length, a negative or non-integer entry or a total
-above the limit is an `ArgumentError`. `separator_partition` has no weighted form:
-its parts are bounded in size, and a vertex heavier than `r` has no part to go to.
+above the limit is an `ArgumentError`. `separator_partition` takes the same
+`weights`; see [Separator partition](partition.md#weights).
 
 The running time is `O(n)` in the worst case: no hashing, no comparison sorts,
 no data-dependent restarts (every loop is a pass over vertices, darts, triangles or

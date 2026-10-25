@@ -1,7 +1,6 @@
 # Possible additions
 
-Status: five-coloring (v0.2.6), weighted `separator` (v0.2.7; not
-`separator_partition`), a true r-division, embedding-preserving edits and
+Status: five-coloring (v0.2.6), weighted `separator` (v0.2.7) and `separator_partition`, a true r-division, embedding-preserving edits and
 `PlanarGraph <: AbstractGraph` are done; the rest are proposals. Written 2026-10-24 after the v0.2.4 release,
 while the independent review of the separator, cycle separator and triangulation
 code was still open; revisit after its findings are fixed.
@@ -58,11 +57,10 @@ throws `ArgumentError`).
   `is_proper_coloring(g, colors)` as a public validator. Recommended: yes to the
   validator, it makes the tests and users' checks trivial.
 
-## 2. Weighted separators — `separator` done, `separator_partition` not
+## 2. Weighted separators — done
 
-`separator(g; weights)` is implemented (integer weights, see `docs/separator.md`).
-A weighted `separator_partition` is left out: a vertex heavier than `r` fits no part,
-so its size bounds would need a different statement.
+`separator` (v0.2.7) and `separator_partition` take integer `weights`. The partition
+bounds parts by weight and does not claim the separator-size bound.
 
 Optional vertex weights for `separator` and `separator_partition`, so that
 "balanced" means by weight. Lipton–Tarjan handles weights directly; the exact

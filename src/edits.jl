@@ -95,8 +95,9 @@ Add the edge `uv` inside a face. At `u` the new edge goes right after the neighb
 0 needs no corner and one of degree 1 has only one; a larger degree requires it.
 The two corners must lie on one face, which is checked by walking that face (the
 cost is the sum of the degrees along it). An endpoint of degree 0 can go into any
-face. Edges between two components are not supported: build such a graph with
-`PlanarGraph(rotation)`.
+face. When the corners are on no common face, `u` and `v` may still lie in different
+components; the edge then joins them (any two corners are fine), which costs one
+search from `u`, `O(n + m)`, to find out.
 
 Throws an `ArgumentError` for `u == v`, an existing edge, an unknown vertex, a
 corner that is missing, wrong or on another face.
@@ -117,6 +118,7 @@ function add_edge_in_face!(
     pu = _corner(g, u, after_u)
     pv = _corner(g, v, after_v)
     _share_face(g, (u, pu), (v, pv)) ||
+        !_connected(g, u, v) ||
         throw(ArgumentError("the corners of $u and $v are not on one face"))
     insert!(g.rotation[u], pu + 1, T(v))
     insert!(g.rotation[v], pv + 1, T(u))
@@ -159,6 +161,23 @@ function _share_face(g::PlanarGraph, (u, pu), (v, pv))
         dart = _next_on_face(g, dart)
         dart == first && return false
     end
+end
+
+# Whether `v` can be reached from `u` (only asked when the corners share no face).
+function _connected(g::PlanarGraph, u::Integer, v::Integer)
+    seen = falses(nv(g))
+    seen[u] = true
+    stack = Int[u]
+    while !isempty(stack)
+        x = pop!(stack)
+        x == v && return true
+        for w in neighbors(g.graph, x)
+            seen[w] && continue
+            seen[w] = true
+            push!(stack, w)
+        end
+    end
+    return false
 end
 
 function _next_on_face(g::PlanarGraph, (x, y))

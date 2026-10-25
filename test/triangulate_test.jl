@@ -114,7 +114,13 @@ end
             rg, rt = rotation(g), rotation(t)
             for v = 1:n
                 kept = [w for w in rt[v] if has_edge(g, v, w)]
-                @test BasicPlanarGraphs.same_cyclic_order(kept, rg[v])
+                # the same cyclic order in the same direction, not only up to reversal
+                @test length(kept) == length(rg[v]) && (
+                    isempty(kept) || any(
+                        p -> BasicPlanarGraphs._shift_matches(kept, rg[v], p),
+                        eachindex(kept),
+                    )
+                )
             end
             tested += 1
         end

@@ -46,7 +46,8 @@ vertex); `hash` agrees with it (it looks at the graph only, which equal embeddin
 
 Edits that keep the embedding, in place, returning `g`; vertex numbers never change
 (a contracted vertex stays, isolated). `ArgumentError` for a missing edge, an unknown
-vertex, or corners that are not on one face. See [Embedding](embedding.md#edits).
+vertex, or two corners of one component that are not on one face. See
+[Embedding](embedding.md#edits).
 
 ### `neighbor_order(g, v) -> Vector{T}`
 
@@ -150,13 +151,14 @@ rotation system that is not a planar embedding. Deterministic for a given graph.
 
 ## Separator partition
 
-### `separator_partition(g, r; subgraphs = false) -> SeparatorPartition`
+### `separator_partition(g, r; subgraphs = false, weights = nothing) -> SeparatorPartition`
 
 Separator `S` and parts of at most `r` vertices with no edge between two parts;
 `|S| <= 16 nv(g)/sqrt(r)`, at most `2 nv(g)/r + 1` parts, `O(n (1 + log(n/r)))`
 time. Fields `separator`, `parts`, `part_of`, and with `subgraphs = true`
 `local_index` and `graphs`. `r < 1` or a non-planar rotation system is an
-`ArgumentError`. See [Separator partition](partition.md).
+`ArgumentError`. With `weights` (nonnegative integers) parts are bounded by weight; the
+separator bound is then not claimed. See [Separator partition](partition.md).
 
 ## Coloring
 

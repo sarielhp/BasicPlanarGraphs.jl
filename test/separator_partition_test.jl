@@ -104,3 +104,76 @@ end
         @test sizes[1] <= 16 * nv(g) / 2
     end
 end
+
+# The guarantees that survive weights: a partition of the vertices, parts of weight
+# at most `r`, no edge between two parts, `k <= 2W/r + 1`, and every vertex heavier
+# than `r` in the separator.
+function check_weighted_partition(g, p, r, w)
+    n = nv(g)
+    @test sort(vcat(p.separator, p.parts...)) == collect(1:n)
+    @test all(!isempty, p.parts)
+    @test all(sum(w[part]) <= r for part in p.parts)
+    for v in p.separator
+        @test p.part_of[v] == 0
+    end
+    for (i, part) in enumerate(p.parts), v in part
+        @test p.part_of[v] == i
+    end
+    for e in edges(g)
+        a, b = p.part_of[src(e)], p.part_of[dst(e)]
+        @test a == 0 || b == 0 || a == b
+    end
+    @test length(p.parts) <= 2 * sum(w) / r + 1
+    @test all(v -> p.part_of[v] == 0, findall(>(r), w))
+    return nothing
+end
+
+@testset "weighted separator partition" begin
+    @testset "unit weights change nothing" begin
+        for g in (planar_grid(15, 15), random_triangulation(300; rng = MersenneTwister(5)))
+            for r in (1, 7, 50)
+                p = separator_partition(g, r)
+                q = separator_partition(g, r; weights = ones(Int, nv(g)))
+                @test (q.separator, q.parts, q.part_of) == (p.separator, p.parts, p.part_of)
+            end
+        end
+    end
+
+    @testset "random weights" begin
+        rng = MersenneTwister(12)
+        graphs = [
+            planar_grid(14, 14),
+            planar_wheel(80),
+            planar_path(90),
+            random_triangulation(300; rng),
+            thin_out(random_triangulation(300; rng), 0.5, rng),
+            disjoint_union(planar_grid(7, 7), planar_wheel(20), planar_path(11)),
+        ]
+        for g in graphs, trial = 1:4, r in (5, 40, 300)
+            w = rand(rng, trial == 1 ? (0:1) : trial == 2 ? (0:10) : (0:100), nv(g))
+            check_weighted_partition(g, separator_partition(g, r; weights = w), r, w)
+        end
+    end
+
+    @testset "heavy vertices and extremes" begin
+        g = planar_grid(10, 10)
+        w = ones(Int, 100)
+        w[[7, 55]] .= [90, 500]
+        p = separator_partition(g, 60; weights = w)
+        check_weighted_partition(g, p, 60, w)
+        @test 55 in p.separator
+        # all weight on one vertex
+        z = zeros(Int, 100)
+        z[3] = 10
+        check_weighted_partition(g, separator_partition(g, 4; weights = z), 4, z)
+        # zero weights: one part, no separator
+        p = separator_partition(g, 1; weights = zeros(Int, 100))
+        @test isempty(p.separator) && length(p.parts) == 1
+        # induced graphs still come with weights
+        p = separator_partition(g, 40; weights = ones(Int, 100), subgraphs = true)
+        @test p.graphs !== nothing && length(p.graphs) == length(p.parts)
+        @test_throws ArgumentError separator_partition(g, 5; weights = ones(Int, 99))
+        @test_throws ArgumentError separator_partition(g, 5; weights = fill(-1, 100))
+        @test_throws ArgumentError separator_partition(g, 5; weights = ones(100))
+    end
+end

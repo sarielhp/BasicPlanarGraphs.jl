@@ -31,6 +31,20 @@ empty separator and one part; the empty graph gives empty output; `r < 1` is an
 `ArgumentError`, as is a rotation system that is not a planar embedding. A part
 may contain several components of `g - S`.
 
+## Weights
+
+`separator_partition(g, r; weights = w)` takes one nonnegative integer per vertex, as
+[`separator`](separator.md) does, and bounds a part by its total weight:
+
+- every part weighs at most `r`, and `k <= 2W/r + 1` for the total weight `W`;
+- a vertex heavier than `r` fits in no part and is in the separator;
+- guarantees 1, 3 and 6 are unchanged, and every group is cut by the weighted separator
+  until it weighs at most `r`;
+- the separator bound of guarantee 4 is **not** claimed: the weight can sit on few
+  vertices, and the separator bounds the number of vertices it removes, not their weight.
+
+Without `weights` the result is identical to before (checked on fixed cases).
+
 ## Algorithm and cost
 
 A group of `q > r` vertices is split with [`separator`](separator.md): its

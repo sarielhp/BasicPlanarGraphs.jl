@@ -31,7 +31,7 @@ struct SeparatorPartition
 end
 
 """
-    separator_partition(g, r; subgraphs = false) -> SeparatorPartition
+    separator_partition(g, r; subgraphs = false, weights = nothing) -> SeparatorPartition
 
 Partition the vertices of the embedded planar graph `g` into a separator `S`
 and parts `P₁, …, Pₖ` such that
@@ -53,6 +53,13 @@ cost of every conversion, component search and grouping is included. `r` must
 be at least `1`. With `subgraphs = true` the induced graph of each part is also
 returned, in `O(n)` additional time and space.
 
+With `weights` (one nonnegative integer per vertex, as for [`separator`](@ref)) a part
+is bounded by its total weight: guarantees 2 and 5 read "weight at most `r`" and
+"`k <= 2W/r + 1`" with `W` the total weight, and guarantee 4 is not claimed. A vertex of
+weight above `r` fits in no part and ends in `S`. The separator can be much larger than
+the bound of 4, since the weight can sit on few vertices and a separator cuts the
+vertex count, not the weight.
+
 ```julia
 g = planar_grid(30, 30)
 p = separator_partition(g, 50)
@@ -60,12 +67,18 @@ all(length(P) <= 50 for P in p.parts)     # true
 p.part_of[p.separator[1]] == 0            # true
 ```
 """
-function separator_partition(g::PlanarGraph, r::Integer; subgraphs::Bool = false)
+function separator_partition(
+    g::PlanarGraph,
+    r::Integer;
+    subgraphs::Bool = false,
+    weights = nothing,
+)
     r >= 1 || throw(ArgumentError("r must be at least 1, got $r"))
     n = nv(g)
+    w = _vertex_weights(weights, n)
     n == 0 && return SeparatorPartition(Int[], Vector{Int}[], Int[], nothing, nothing)
-    separator, terminals = _recurse(_planar_dart_graph(g), Int(r))
-    parts = _next_fit(terminals, Int(r))
+    separator, terminals = _recurse(_planar_dart_graph(g), Int(r), w)
+    parts = _next_fit(terminals, Int(r), w)
     part_of = zeros(Int, n)
     for (i, part) in enumerate(parts), v in part
         part_of[v] = i
@@ -79,18 +92,21 @@ end
 
 # A group is an induced embedded graph together with the original ids of its
 # vertices. A processed group is dropped as soon as its children exist, so the
-# live groups are disjoint and their total size stays `O(n)`.
-function _recurse(dg::DartGraph, r::Int)
+# live groups are disjoint and their total size stays `O(n)`. A group is final when
+# its weight is at most `r`.
+function _recurse(dg::DartGraph, r::Int, w::Vector{Int})
     separator = Int[]
     terminals = Vector{Vector{Int}}()
     stack = Tuple{DartGraph,Vector{Int}}[(dg, collect(1:dg.n))]
     while !isempty(stack)
         graph, ids = pop!(stack)
-        if graph.n <= r
+        local_w = w[ids]
+        total = sum(local_w)
+        if total <= r
             push!(terminals, ids)
             continue
         end
-        side = _best_partition(graph, (2 * graph.n) ÷ 3)
+        side = _best_partition(graph, (2 * total) ÷ 3, local_w)
         append!(separator, ids[v] for v in findall(iszero, side))
         for s in (Int8(1), Int8(2))
             child = _child(graph, ids, side, s)
@@ -108,17 +124,21 @@ function _child(graph::DartGraph, ids::Vector{Int}, side::Vector{Int8}, s::Int8)
 end
 
 # Next-fit: the next terminal group joins the current part when it fits. Two
-# consecutive parts together hold more than `r` vertices, so there are at most
-# `2n/r + 1` of them.
-function _next_fit(terminals::Vector{Vector{Int}}, r::Int)
+# consecutive parts together weigh more than `r`, so there are at most `2W/r + 1`
+# of them.
+function _next_fit(terminals::Vector{Vector{Int}}, r::Int, w::Vector{Int})
     parts = Vector{Vector{Int}}()
     current = Int[]
+    held = 0
     for group in terminals
-        if !isempty(current) && length(current) + length(group) > r
+        weight = sum(w[group])
+        if !isempty(current) && held + weight > r
             push!(parts, current)
             current = Int[]
+            held = 0
         end
         append!(current, group)
+        held += weight
     end
     isempty(current) || push!(parts, current)
     return parts

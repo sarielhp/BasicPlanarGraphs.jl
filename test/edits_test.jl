@@ -90,6 +90,14 @@ edge_set(g) = Set((min(src(e), dst(e)), max(src(e), dst(e))) for e in edges(g))
         z = PlanarGraph([Int[], Int[]])
         add_edge_in_face!(z, 1, 2)
         @test consistent(z) && ne(z) == 1
+        # two components: any corners will do, and the result is one planar embedding
+        two = disjoint_union(planar_cycle(5), planar_cycle(4))
+        for a in neighbor_order(two, 1), b in neighbor_order(two, 6)
+            h = PlanarGraph(two.graph, rotation(two))
+            add_edge_in_face!(h, 1, 6; after_u = a, after_v = b)
+            @test consistent(h) && has_edge(h, 1, 6)
+            @test length(connected_components(h)) == 1
+        end
         # adding then deleting restores the embedding
         h = planar_grid(4, 4)
         copy_h = PlanarGraph(h.graph, rotation(h))
