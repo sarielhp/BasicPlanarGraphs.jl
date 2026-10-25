@@ -139,12 +139,13 @@ end
     end
 
     @testset "chords are spread over the vertices of a face" begin
-        # Going around the face clips every other vertex, so no vertex collects
-        # the chords of the whole face (a fan from one vertex would give a
-        # degree of n - 1): the degree stays logarithmic.
+        # A ladder cuts the face into quadrangles, so no vertex collects the
+        # chords of the whole face (a fan from one vertex would give a degree of
+        # n - 1): a vertex gains a constant number of edges per face, also when
+        # the rungs are blocked by edges outside (the ladder graph, a path).
         for g in (planar_cycle(4000), planar_path(4000), planar_grid(2, 2000))
             t = triangulate(g)
-            @test maximum(degree(t, v) for v = 1:nv(t)) <= 3 * ceil(Int, log2(nv(g)))
+            @test maximum(degree(t, v) - degree(g, v) for v = 1:nv(g)) <= 6
         end
     end
 end

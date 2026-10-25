@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `triangulate` cuts each face by a ladder (vertex `i` joined to vertex `k+1-i`) and
+  closes the quadrangles with a diagonal, so a vertex gains a constant number of
+  edges per face; regions left by blocked rungs get a slanted ladder. A vertex gains at most 5
+  chords per face. Still `O(n + m)`; no edge is added twice.
+
 ## [0.2.3] - 2026-10-24
 
 ### Changed

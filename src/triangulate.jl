@@ -1,27 +1,29 @@
 # Triangulation of an embedded graph by inserting chords inside faces.
 #
-# Two linear passes over each face, both going around its boundary and clipping
-# ears: the chord `ac` between the neighbours of a boundary position `b` is
-# added and `b` leaves the boundary.
+# A face boundary that repeats a vertex (a bridge or a cut vertex) first loses its
+# repeated occurrences: such an occurrence can always be clipped, since the vertex
+# appears twice, so its neighbours `a` and `c` lie in different blocks around it
+# and are not adjacent. After a clip the next occurrence is skipped, so the chords
+# are spread over the vertices instead of chaining through one of them.
 #
-#   * A boundary that repeats a vertex (a bridge or a cut vertex) first loses its
-#     repeated occurrences. Such an occurrence can always be clipped: the vertex
-#     appears twice, so `a` and `c` lie in different blocks around it and are
-#     not adjacent. After a clip the next occurrence is skipped, so the chords
-#     are spread over the vertices instead of chaining through one of them.
-#   * The remaining simple cycle is clipped at every position whose neighbours
-#     `a` and `c` are not adjacent yet; otherwise the next position is tried.
-#     Among four consecutive vertices `a, b, c, d` the chord `ac` or `bd` is
-#     always new, since two edges outside the face joining `a, c` and `b, d`
-#     would cross, so a failure is followed by a success. After a clip the next
-#     vertex is skipped, so every pass removes a constant fraction of the face.
+# The remaining simple cycle `p_1 … p_k` is cut by a ladder: `p_i` is joined to
+# `p_{k+1-i}`. The rungs are nested, so they cut the face into quadrangles, and
+# each quadrangle `a, b, c, d` takes the diagonal `ac` or `bd`: both outside the
+# face would cross, so one is always new. Every vertex gets at most one rung and
+# two diagonals, a constant degree. A rung whose ends are already adjacent
+# outside the face is skipped, which merges its quadrangles into a larger
+# region. All rungs of such a region are edges outside the face, and each rung of
+# a ladder started one position later (a slanted ladder) crosses one of them, so
+# none is blocked: the slanted ladder cuts the region into quadrangles, and a
+# vertex gains at most 5 chords per face (3 unless it ends a first-ladder rung).
+# On an input that is not a planar embedding a quadrangle can have both diagonals
+# blocked, and the triangulation is rejected.
 #
 # The adjacency test scans the smaller of the two degrees. A test that succeeds
 # is charged to the chord it adds, one that fails to the edge it finds, and the
 # sum over the edges of the smaller degree is `O(n)` in a planar graph (Chiba and
 # Nishizeki), so the whole triangulation is `O(n + m)`, with no hashing, and never
 # adds an edge that is already there.
-
 """
     triangulate(g) -> same type as g
 
@@ -57,7 +59,7 @@ function _add_chords!(h::DartGraph)
         length(orbit) <= 3 && continue
         orbit = _peel_repeats!(h, orbit, occurrences)
         length(orbit) <= 3 && continue
-        _clip_ears!(h, orbit)
+        _ladder!(h, orbit)
     end
     return h
 end
@@ -168,46 +170,75 @@ end
 
 # --- simple faces --------------------------------------------------------
 
-# Clip the simple face with the darts `orbit` down to a triangle, going around
-# it. A test that failed is remembered as the pair of neighbours it was made
-# with, so it is not repeated until a neighbour changes. Each pass removes at
-# least a third of the vertices, so there are at most about `3k` visits; the
-# bound only guards against an input that is not a planar embedding.
-function _clip_ears!(h::DartGraph, orbit::Vector{Int})
+# A rung of the ladder: the chord between the positions `s` and `t`, with its two
+# darts. The base rung is the boundary edge between the positions `1` and `k`.
+struct _Rung
+    s::Int
+    t::Int
+    forward::Int
+    backward::Int
+end
+
+# Triangulate the simple face with the darts `orbit` (a dart leaves each boundary
+# vertex along the face) with a ladder, then close the regions it leaves. A region
+# of at least five vertices has all its rungs blocked by edges outside the face; a
+# ladder started one position later pairs the vertices at a slant, which those
+# edges do not block, so a slanted ladder leaves only quadrangles and a triangle.
+function _ladder!(h::DartGraph, orbit::Vector{Int}, slanted::Bool = false)
+    for region in _regions(orbit, _add_rungs!(h, orbit))
+        _close_region!(h, region, slanted)
+    end
+    return nothing
+end
+
+# Join the positions `i + 1` and `k - i` for `i = 1, 2, …` whenever the two
+# vertices are not adjacent yet. The base rung comes first.
+function _add_rungs!(h::DartGraph, orbit::Vector{Int})
     k = length(orbit)
     verts = Int[tail(h, d) for d in orbit]
-    dart = copy(orbit)
-    prevp = [mod1(t - 1, k) for t = 1:k]
-    nextp = [mod1(t + 1, k) for t = 1:k]
-    failed = zeros(Int, k, 2)
-    remaining = k
-    cur = 1
-    for _ = 1:(20k+20)
-        remaining > 3 || return nothing
-        a = prevp[cur]
-        c = nextp[cur]
-        if _fails(h, failed, cur, verts[a], verts[c])
-            cur = c
-        else
-            dart[a] = _add_chord!(h, verts[a], verts[c], dart[a], dart[c])
-            nextp[a] = c
-            prevp[c] = a
-            remaining -= 1
-            cur = nextp[c]
-        end
+    rungs = [_Rung(1, k, 0, orbit[k])]
+    for i = 1:((k-3)÷2)
+        s = i + 1
+        t = k - i
+        _adjacent(h, verts[s], verts[t]) && continue
+        forward = _add_chord!(h, verts[s], verts[t], orbit[s], orbit[t])
+        push!(rungs, _Rung(s, t, forward, h.twin[forward]))
+    end
+    return rungs
+end
+
+# The boundary darts of the region between each two consecutive rungs, and of the
+# one inside the last rung. A rung's forward dart bounds the region outside it, its
+# backward dart the region inside.
+function _regions(orbit::Vector{Int}, rungs::Vector{_Rung})
+    regions = Vector{Vector{Int}}()
+    for j = 2:length(rungs)
+        a, b = rungs[j-1], rungs[j]
+        push!(regions, vcat(orbit[b.t:(a.t-1)], a.backward, orbit[a.s:(b.s-1)], b.forward))
+    end
+    a = rungs[end]
+    push!(regions, vcat(orbit[a.s:(a.t-1)], a.backward))
+    return regions
+end
+
+# A triangle is done, a quadrangle takes the diagonal that is new, and a larger
+# region, left by skipped rungs, gets a slanted ladder.
+function _close_region!(h::DartGraph, region::Vector{Int}, slanted::Bool)
+    k = length(region)
+    k <= 3 && return nothing
+    if k > 4
+        slanted && throw(_not_triangulable())
+        return _ladder!(h, vcat(region[2:end], region[1]), true)
+    end
+    verts = Int[tail(h, d) for d in region]
+    for (s, t) in ((1, 3), (2, 4))
+        _adjacent(h, verts[s], verts[t]) && continue
+        _add_chord!(h, verts[s], verts[t], region[s], region[t])
+        return nothing
     end
     throw(_not_triangulable())
 end
 
-# True when the chord between the vertices `u` and `w` cannot be added, because
-# they are adjacent; the answer is kept for `b` while its neighbours stay.
-function _fails(h::DartGraph, failed::Matrix{Int}, b::Int, u::Int, w::Int)
-    (failed[b, 1] == u && failed[b, 2] == w) && return true
-    _adjacent(h, u, w) || return false
-    failed[b, 1] = u
-    failed[b, 2] = w
-    return true
-end
 
 # Adjacent vertices, found by scanning the one of smaller degree.
 function _adjacent(h::DartGraph, u::Int, w::Int)

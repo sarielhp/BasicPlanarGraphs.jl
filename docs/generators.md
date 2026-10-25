@@ -92,23 +92,30 @@ An `ArgumentError` is raised instead of returning a graph that only looks like a
 triangulation if the rotation system does not describe a planar embedding, or if
 a component is a single edge (no chord can make its face a triangle).
 
-The algorithm goes around the boundary of each face clipping ears: the chord
-between the two neighbours of a boundary position is added and that position
-leaves the boundary.
+A boundary that repeats a vertex (a bridge or a cut vertex) first loses its
+repeated occurrences: such an occurrence can always be clipped, because the
+vertex appears twice, so its two neighbours lie in different blocks around it
+and are not adjacent. After a clip the next occurrence is skipped, so the
+chords do not chain through one vertex.
 
-- A boundary that repeats a vertex (a bridge or a cut vertex) first loses its
-  repeated occurrences. Such an occurrence can always be clipped, because the
-  vertex appears twice, so its two neighbours lie in different blocks around it
-  and are not adjacent.
-- The remaining simple cycle is clipped at every position whose neighbours `a` and
-  `c` are not adjacent yet; if they are, the next position is tried. Among four
-  consecutive vertices `a, b, c, d` the chord `ac` or `bd` is always new, because
-  two edges outside the face joining `a, c` and `b, d` would cross; so a failure
-  is followed by a success.
-- After a clip the next position is skipped, so each pass removes a constant
-  fraction of the face and the chords are spread over its vertices: the degree
-  of a vertex grows by `O(log k)` for a face of length `k`, instead of a fan's
-  `k - 3` at one vertex.
+The remaining simple cycle `p_1 … p_k` is cut by a **ladder**: `p_i` is joined to
+`p_{k+1-i}`. The rungs are nested, so they cut the face into quadrangles, and
+each quadrangle `a, b, c, d` takes the diagonal `ac` or `bd`: two edges outside
+the face joining `a, c` and `b, d` would cross, so one of them is new. A vertex
+gets at most one rung and two diagonals, a constant degree, instead of a fan's
+`k - 3` at one vertex.
+
+A rung whose ends are already adjacent outside the face is skipped, which merges
+its quadrangles into a larger region. All rungs of that region are edges outside
+the face, and each rung of a **slanted ladder** (started one position later, so
+the vertices are paired at a slant) crosses one of them in the sense of
+alternating ends on the boundary. By planarity it is therefore not blocked, so
+the slanted ladder cuts the region into quadrangles and a final triangle or
+quadrangle too. A vertex gains at most 5 chords per face (3 unless it ends a
+rung of the first ladder), and the bound is attained. The only edges that can
+block a chord are non-crossing edges of the disk outside the face, which is all
+the argument uses. If the input is not a planar embedding, a quadrangle may have
+both diagonals blocked and an `ArgumentError` is raised.
 
 The adjacency test scans the smaller of the two degrees. A test that succeeds is
 charged to the chord it adds, one that fails to the edge it finds, and the sum
