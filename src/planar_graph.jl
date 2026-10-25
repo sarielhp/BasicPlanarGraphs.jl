@@ -69,8 +69,16 @@ function _rotation_eltype(rotation)
 end
 
 function _convert_rotation(rotation, ::Type{T}) where {T<:Integer}
-    length(rotation) >= 0 || throw(ArgumentError("rotation must be a vector of vectors"))
-    return [T[x for x in r] for r in rotation]
+    all(r -> r isa AbstractVector, rotation) ||
+        throw(ArgumentError("rotation must be a vector of vectors"))
+    _rotation_eltype(rotation)
+    return [T[_to_vertex(T, x) for x in r] for r in rotation]
+end
+
+function _to_vertex(::Type{T}, x::Integer) where {T<:Integer}
+    typemin(T) <= x <= typemax(T) ||
+        throw(ArgumentError("rotation entry $x does not fit the vertex type $T"))
+    return T(x)
 end
 
 function _check_rotation(graph::SimpleGraph, rot::Vector{Vector{T}}) where {T}
@@ -132,7 +140,9 @@ function Base.:(==)(a::PlanarGraph, b::PlanarGraph)
     return all(v -> same_cyclic_order(a.rotation[v], b.rotation[v]), eachindex(a.rotation))
 end
 
-Base.hash(g::PlanarGraph, h::UInt) = hash(g.rotation, hash(:PlanarGraph, h))
+# Equal embeddings have equal graphs, whatever shift or direction their rotations
+# have, so the hash looks at the graph only.
+Base.hash(g::PlanarGraph, h::UInt) = hash(g.graph, hash(:PlanarGraph, h))
 
 """
     same_cyclic_order(x, y) -> Bool
@@ -193,16 +203,43 @@ is_planar_embedding(g::PlanarGraph) = euler_holds(DartGraph(g))
     dual(g) -> PlanarGraph
 
 Dual of the embedding: one vertex per face, one edge per primal edge.
-Requires a bridge-free primal graph (otherwise the dual has self-loops).
+
+A `PlanarGraph` is simple, so the dual must be too. An `ArgumentError` is thrown
+when the graph is not connected or has no edge, when the embedding is not planar,
+when the dual would have a self-loop (a bridge), when it would have parallel edges
+(two faces sharing more than one edge, as around a vertex of degree two or at a
+2-edge cut), or when the number of faces does not fit the vertex type. A
+triangulation with at least four vertices always qualifies.
 """
 function dual(g::PlanarGraph{T}) where {T}
     dg = DartGraph(g)
     orbits, face_of = face_orbits(dg)
+    _check_dualizable(dg, length(orbits), T)
+    mark = zeros(Int, length(orbits))
     rot = Vector{Vector{T}}()
-    for orbit in orbits
-        push!(rot, T[face_of[dg.twin[d]] for d in orbit])
+    for (f, orbit) in enumerate(orbits)
+        around = T[]
+        for d in orbit
+            h = face_of[dg.twin[d]]
+            h == f && throw(ArgumentError("the dual has a self-loop (a bridge)"))
+            mark[h] == f && throw(ArgumentError("the dual has parallel edges"))
+            mark[h] = f
+            push!(around, T(h))
+        end
+        push!(rot, around)
     end
     return PlanarGraph(rot)
+end
+
+function _check_dualizable(dg::DartGraph, nfaces::Int, ::Type{T}) where {T}
+    ndarts(dg) > 0 || throw(ArgumentError("the dual needs a graph with an edge"))
+    euler_holds(dg) ||
+        throw(ArgumentError("the dual needs a planar embedding (Euler's formula fails)"))
+    dg.n - nedges(dg) + nfaces == 2 ||
+        throw(ArgumentError("the dual needs a connected graph"))
+    nfaces <= typemax(T) ||
+        throw(ArgumentError("$nfaces faces do not fit the vertex type $T"))
+    return nothing
 end
 
 # --- conversions ---------------------------------------------------------

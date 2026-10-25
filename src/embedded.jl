@@ -63,6 +63,18 @@ nedges(g::DartGraph) = length(g.head) >>> 1
 
 tail(g::DartGraph, d::Integer) = g.tail[d]
 
+# The anchor of a new dart at `u` must be checked before anything is pushed, so
+# that a bad anchor leaves the graph unchanged.
+function _check_anchor(g::DartGraph, u::Integer, anchor::Integer)
+    if anchor == 0
+        g.first[u] == 0 || throw(ArgumentError("anchor required for non-empty rotation"))
+    else
+        (1 <= anchor <= length(g.head) && g.tail[anchor] == u) ||
+            throw(ArgumentError("dart $anchor does not leave vertex $u"))
+    end
+    return nothing
+end
+
 function _insert_after!(g::DartGraph, d::Integer, anchor::Integer, v::Integer)
     if anchor == 0
         g.first[v] == 0 || throw(ArgumentError("anchor required for non-empty rotation"))
@@ -90,6 +102,7 @@ function add_dart!(g::DartGraph, u::Integer, v::Integer, anchor::Integer = 0)
     (1 <= u <= g.n && 1 <= v <= g.n) ||
         throw(ArgumentError("vertices out of range: $u, $v"))
     u == v && throw(ArgumentError("self-loops are not supported"))
+    _check_anchor(g, u, anchor)
     d = length(g.head) + 1
     push!(g.tail, Int(u))
     push!(g.head, Int(v))

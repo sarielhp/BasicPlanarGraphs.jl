@@ -84,7 +84,7 @@ a vertex into a random face.
 """
 function random_triangulation(n::Integer; rng = Random.default_rng())
     n >= 3 || throw(ArgumentError("need at least 3 vertices, got $n"))
-    dg = _embedded_triangle(n)
+    dg = _embedded_triangle(Int(n))
     faces, _ = face_orbits(dg)
     for v = 4:n
         index = rand(rng, eachindex(faces))

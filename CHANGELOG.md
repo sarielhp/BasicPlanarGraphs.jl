@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `hash(::PlanarGraph)` agrees with `==` (equal embeddings with shifted or
+  reversed rotations hashed differently).
+- `dual` checks its preconditions and throws a clear `ArgumentError` for a dual with
+  parallel edges or self-loops, a disconnected or non-planar input, and a face
+  count that overflows the vertex type; its documentation no longer says that
+  bridge-free is enough.
+- `PlanarGraph(graph, rotation)` throws `ArgumentError` for non-integer entries;
+  `add_dart!` validates its anchor before changing the graph;
+  `random_triangulation` accepts any `Integer`.
+- `grid_drawing` and `planar_embedding` are linear for graphs with many components
+  (they were quadratic).
+
 ### Changed
 
 - `triangulate` cuts each face by a ladder (vertex `i` joined to vertex `k+1-i`) and

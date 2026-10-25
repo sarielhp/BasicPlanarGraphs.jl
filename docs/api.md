@@ -28,7 +28,7 @@ permutation of the neighbours of its vertex; a neighbour is out of range; a vert
 lists itself; a rotation entry is not an integer.
 
 Equality is equality of graph and cyclic order (up to shift and reversal at each
-vertex); `hash` agrees with it.
+vertex); `hash` agrees with it (it looks at the graph only, which equal embeddings share).
 
 ## Embedding queries
 
@@ -65,8 +65,10 @@ a rotation system.
 ### `dual(g) -> PlanarGraph`
 
 One vertex per face of `g`, one edge per primal edge; the dual is 3-regular when
-`g` is a triangulation. Throws `ArgumentError` for a graph with a bridge, whose
-dual edge would be a self-loop.
+`g` is a triangulation. Throws `ArgumentError` when the dual would not be a simple
+graph (a bridge gives a self-loop; a vertex of degree two or a 2-edge cut gives
+parallel edges), for a disconnected or non-planar input, and when the number of
+faces does not fit the vertex type.
 
 ## Planarity and embedding
 

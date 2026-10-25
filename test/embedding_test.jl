@@ -130,3 +130,61 @@ end
     @test parent[1] == 0
     @test all(depth[parent[v]] == depth[v] - 1 for v = 2:6 if parent[v] != 0)
 end
+
+@testset "hash, constructors and dual contracts" begin
+    a = PlanarGraph([[2, 3, 4], [1], [1], [1]])
+    for rot in ([[3, 4, 2], [1], [1], [1]], [[4, 3, 2], [1], [1], [1]])
+        b = PlanarGraph(rot)
+        @test a == b
+        @test hash(a) == hash(b)
+    end
+    @test length(Set([a, PlanarGraph([[3, 2, 4], [1], [1], [1]])])) == 1
+    @test hash(a) != hash(PlanarGraph([[2], [1], Int[], Int[]]))
+
+    g = SimpleGraph(2)
+    add_edge!(g, 1, 2)
+    @test_throws ArgumentError PlanarGraph(g, [[2.5], [1]])
+    @test_throws ArgumentError PlanarGraph(g, [[2.0], [1]])
+    @test_throws ArgumentError PlanarGraph(g, [["a"], [1]])
+    @test_throws ArgumentError PlanarGraph(g, [2, 1])
+    @test PlanarGraph(g, [[2], [1]]) == PlanarGraph([[2], [1]])
+
+    # Duals that would have parallel edges or self-loops, a disconnected graph,
+    # and a non-planar rotation get a message that says so.
+    for bad in (
+        planar_cycle(3),
+        planar_cycle(5),
+        planar_grid(3, 3),
+        planar_path(2),
+        disjoint_union(planar_cycle(3), planar_cycle(3)),
+    )
+        @test_throws ArgumentError dual(bad)
+    end
+    err = try
+        dual(planar_cycle(3))
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError && occursin("parallel", err.msg)
+    k5 = PlanarGraph([[w for w = 1:5 if w != v] for v = 1:5])
+    @test_throws ArgumentError dual(k5)
+    @test nv(dual(triangulate(planar_grid(3, 3)))) == 14
+
+    # The number of faces must fit the vertex type.
+    t = triangulate(planar_grid(10, 10))
+    @test_throws ArgumentError dual(PlanarGraph([Int8.(r) for r in rotation(t)]))
+
+    @test nv(random_triangulation(Int32(10); rng = MersenneTwister(1))) == 10
+    @test nv(random_triangulation(UInt8(10); rng = MersenneTwister(1))) == 10
+end
+
+@testset "a bad anchor leaves the dart graph unchanged" begin
+    dg = BasicPlanarGraphs.DartGraph(3)
+    BasicPlanarGraphs.add_dart!(dg, 1, 2, 0)
+    for (u, v, anchor) in ((1, 3, 999), (2, 3, 1), (1, 3, 0), (1, 3, -1))
+        @test_throws ArgumentError BasicPlanarGraphs.add_dart!(dg, u, v, anchor)
+    end
+    @test BasicPlanarGraphs.ndarts(dg) == 1
+    @test dg.deg == [1, 0, 0]
+end

@@ -34,7 +34,7 @@ construction. It validates as it builds:
 | a neighbour `w` with `w < 1` or `w > n` | `ArgumentError("neighbour $w of vertex $v is out of range")` |
 | `v` listing itself | `ArgumentError("vertex $v lists itself as a neighbour")` |
 | a non-integer entry | `ArgumentError("rotation entries must be integers, ...")` |
-| the same neighbour twice | `ArgumentError("rotation of vertex $v is not a permutation of its neighbours")` |
+| the same neighbour twice | `ArgumentError("rotation of vertex $v has 2 entries, expected 1")`: the graph keeps one edge, so the length check fires first |
 
 `PlanarGraph(graph, rotation)` performs the mirror check against an existing
 graph: the rotation must have one entry per vertex, and `rotation[v]` must be a
@@ -122,10 +122,14 @@ triangulation is 3-regular. The rotation of the dual is built from the primal
 face orbits, so the dual is itself a `PlanarGraph` and the operation can be
 iterated.
 
-The primal graph must be **bridge-free**. A bridge has the same face on both
-sides, so its dual edge would be a self-loop, which `PlanarGraph` does not
-represent; `dual(planar_path(3))` therefore throws an `ArgumentError` rather than
-returning a broken object.
+The dual must be a simple graph, because `PlanarGraph` is. A bridge has the same
+face on both sides, so its dual edge would be a self-loop, and two faces that
+share more than one edge (around a vertex of degree two, or at a 2-edge cut) give
+parallel edges; `dual(planar_path(3))`, `dual(planar_cycle(5))` and
+`dual(planar_grid(3, 3))` therefore throw an `ArgumentError` that names the
+reason. So does a disconnected graph, a rotation that is not a planar embedding,
+and a face count that does not fit the vertex type. A triangulation with at
+least four vertices always works.
 
 ```julia
 d = dual(triangulate(planar_grid(2, 2)))
@@ -199,6 +203,5 @@ Every embedding query is linear in `n + m`:
 | `dual` | `O(n + m)` | `O(n + m)` |
 | `triangulate` | each face is examined once; the neighbours of its smallest-degree vertex are marked, and the smallest degrees sum to `O(n)` | `O(n + m)` |
 
-Validation uses a sort per vertex to compare against the neighbour list, so
-construction is `O(sum_v d_v log d_v)` in the worst case; for the bounded-degree
-graphs this package targets that is linear.
+Validation marks the neighbours of each vertex with a stamp and consumes the
+rotation entries, so construction is linear.
