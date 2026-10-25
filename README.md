@@ -1,6 +1,7 @@
 # BasicPlanarGraphs
 
 [![CI](https://github.com/sarielhp/BasicPlanarGraphs.jl/actions/workflows/ci.yml/badge.svg)](https://github.com/sarielhp/BasicPlanarGraphs.jl/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/sarielhp/BasicPlanarGraphs.jl/graph/badge.svg)](https://codecov.io/gh/sarielhp/BasicPlanarGraphs.jl)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Planar graphs with an abstract embedding (a rotation system): linear-time
