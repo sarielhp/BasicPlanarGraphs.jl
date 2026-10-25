@@ -126,6 +126,10 @@ julia --project=. examples/test_planarity.jl --help
   in-place to run the tests: no compiled/binary artifacts, no `Pkg.build` outputs or
   uploaded build products, no GitHub releases, tags, or uploads to a package registry.
   This package is pure Julia and has no native code to compile.
+- The one permitted upload is test coverage: the latest-release job runs
+  `julia-processcoverage` and sends `lcov.info` to Codecov (`codecov/codecov-action`,
+  `CODECOV_TOKEN` repository secret, `fail_ci_if_error: false`). It is not a build
+  product, and a missing token or an unreachable Codecov never fails CI.
 - `src/embedded.jl` holds the dart-based rotation-system core (`DartGraph`); the public
   `PlanarGraph` in `src/planar_graph.jl` wraps a `Graphs.jl` `SimpleGraph` plus rotations.
 - The separator (`src/separator.jl`) follows Lipton–Tarjan: BFS levels on the input graph,
