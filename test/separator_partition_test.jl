@@ -58,6 +58,18 @@ end
         @test_throws ArgumentError separator_partition(g, 0)
         crossed = PlanarGraph(g.graph, [collect(neighbors(g.graph, v)) for v = 1:nv(g)])
         @test_throws ArgumentError separator_partition(crossed, 5)
+        # Also when no separator would be needed (r >= n), and when the bad
+        # component is not the one that is cut.
+        @test_throws ArgumentError separator_partition(crossed, nv(crossed))
+        k7 = PlanarGraph([[mod1(i + d, 7) for d in (1, 3, 2, 6, 4, 5)] for i = 1:7])
+        @test !is_planar_embedding(k7)
+        @test_throws ArgumentError separator_partition(k7, 7)
+        @test_throws ArgumentError separator_partition(k7, 100)
+        @test_throws ArgumentError separator(k7)
+        @test_throws ArgumentError separator(disjoint_union(k7, planar_grid(6, 6)))
+        @test_throws ArgumentError separator(
+            disjoint_union(k7, PlanarGraph([Int[] for _ = 1:7])),
+        )
     end
 
     @testset "determinism and immutability" begin

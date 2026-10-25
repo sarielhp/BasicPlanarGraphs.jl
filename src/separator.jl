@@ -49,7 +49,16 @@ function separator(g::PlanarGraph; balance::Real = DEFAULT_BALANCE)
     n = nv(g)
     n == 0 && return (Int[], Int[], Int[])
     cap = max(floor(Int, balance * n), (2 * n) ÷ 3)
-    return _unpack(_best_partition(DartGraph(g), cap))
+    return _unpack(_best_partition(_planar_dart_graph(g), cap))
+end
+
+# The darts of `g`, after a check that every component is planarly embedded. The
+# check has to see the whole graph: the search itself cuts only the largest
+# component, so a rotation system of higher genus elsewhere would go unnoticed.
+function _planar_dart_graph(g::PlanarGraph)
+    dg = DartGraph(g)
+    euler_holds(dg) || throw(_not_planar_error())
+    return dg
 end
 
 # --- candidates and partitions -------------------------------------------

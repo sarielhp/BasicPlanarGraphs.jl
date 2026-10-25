@@ -200,7 +200,7 @@ function _balanced_dual_dart(
 end
 
 _not_planar_error() = ArgumentError(
-    "cannot compute a cycle separator: the rotation system does not describe " *
+    "cannot compute a separator: the rotation system does not describe " *
     "a planar embedding",
 )
 

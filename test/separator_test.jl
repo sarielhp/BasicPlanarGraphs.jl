@@ -21,7 +21,7 @@ function check_separator(g, A, B, C; balance = 2 / 3)
     end
     @test cross == 0
     @test max(length(A), length(B)) <= balance * n
-    @test length(C) <= 2 * sqrt(2 * n) + 1
+    @test length(C) <= 2 * sqrt(2 * n)
     return nothing
 end
 

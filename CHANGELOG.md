@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `separator` and `separator_partition` reject a rotation system that is not planar
+  in **any** component (they checked only the component that was cut, and not at
+  all for `r >= nv`).
+- `cycle_separator` and `cycle_sides` take linear time when the walk returns to a
+  high-degree vertex many times (a star, a windmill): they were quadratic.
+- `triangulate` takes linear expected time when two adjacent hubs are opposite on
+  many faces: it was quadratic. The edges are now kept in a hash set. The documented
+  degree bound distinguishes simple faces (at most 5) from faces that repeat a vertex.
+- Documentation: `triangulate` on disconnected input, the winding-value condition of
+  `cycle_sides`, the cost of walks supplied by the caller.
+
 ## [0.2.4] - 2026-10-24
 
 ### Fixed

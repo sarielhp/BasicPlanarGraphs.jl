@@ -64,7 +64,7 @@ function separator_partition(g::PlanarGraph, r::Integer; subgraphs::Bool = false
     r >= 1 || throw(ArgumentError("r must be at least 1, got $r"))
     n = nv(g)
     n == 0 && return SeparatorPartition(Int[], Vector{Int}[], Int[], nothing, nothing)
-    separator, terminals = _recurse(DartGraph(g), Int(r))
+    separator, terminals = _recurse(_planar_dart_graph(g), Int(r))
     parts = _next_fit(terminals, Int(r))
     part_of = zeros(Int, n)
     for (i, part) in enumerate(parts), v in part

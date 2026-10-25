@@ -26,7 +26,8 @@ value does not change the algorithm, it only lets the final pruning step move
 more separator vertices into `A` and `B`.
 
 The running time is `O(n)` in the worst case: no hashing, no comparison sorts,
-no loop whose trip count depends on the input (see [Complexity](#complexity)).
+no data-dependent restarts (every loop is a pass over vertices, darts, triangles or
+levels; see [Complexity](#complexity)).
 The result is deterministic.
 
 The input must be a planar embedding. A rotation system of higher genus is
@@ -128,7 +129,8 @@ vertex for a single edge).
 Every stage is a pass over vertices, darts or triangles of the virtual
 triangulation (fewer than `2m` of them):
 
-- BFS and levels: `O(n + m)` per root, four roots plus three for the roots;
+- BFS and levels: `O(n + m)` per BFS, at most four roots to try and three more BFS
+  runs to choose them;
 - faces and triangles: `O(n + m)`; the dual tree has no union-find, the cotree
   of a spanning tree already is a tree;
 - the balanced-edge walk: `O(#triangles)`, as above;
