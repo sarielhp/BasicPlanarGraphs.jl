@@ -81,7 +81,11 @@ paper's:
    disjoint nested cycles.
 3. **A ladder.** Every `Δ`-th level cycle, `Δ = ceil(sqrt(n/2))`, gives a small
    ladder; the first rung with `1/3..2/3` of the faces on both sides is returned,
-   else the pieces of the heavy ring.
+   else the pieces of the heavy ring: the ring between two rungs, the disk inside the
+   first rung, or, when every rung is light, the region outside the last rung (the
+   trivial outermost cycle of the paper). Without that last case the answer could be
+   the fundamental cycle, of length proportional to the depth: a triangulated tube
+   of length `L` with a large blob at its end gave `2L + 4` vertices.
 
 The result of phases 2 and 3 is **checked**: if it is not a walk with both sides
 at most `2n/3`, the exact balanced walk below replaces it.

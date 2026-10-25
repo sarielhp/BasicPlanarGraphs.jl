@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `cycle_separator` on a triangulation returned a cycle of length proportional to
+  the BFS depth (`2L + 4` on a triangulated tube of length `L` with a large end)
+  when every rung of the ladder was light, because the ring outside the last rung,
+  a case of the paper, was missing. The `O(sqrt(n))` length guarantee now holds on
+  that family (214 instead of 3 204 vertices at `L = 1600`); the tests now reach
+  phases 2 and 3 with a small step.
 - `separator` and `separator_partition` reject a rotation system that is not planar
   in **any** component (they checked only the component that was cut, and not at
   all for `r >= nv`).

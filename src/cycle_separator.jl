@@ -12,9 +12,11 @@
 # The paper works on a triangulation, and phases 2 and 3 give its `O(sqrt(n))`
 # bound there. For any other connected graph the cycle comes from the virtual
 # star triangulation of separator.jl and is lifted to a closed walk of the
-# input (cycle_walk.jl); it is balanced, but its length is not bounded. In both
-# cases the result is checked, and the exact balanced walk is the fallback, so
-# the balance guarantee never depends on the heuristics of phases 2 and 3.
+# input (cycle_walk.jl); it is balanced, but its length is not bounded. On a
+# triangulation the result of phases 2 and 3 is checked and the exact balanced walk
+# is the fallback, so balance never depends on their heuristics; the exact walk
+# itself is balanced by Lemma 2 (and its lifting keeps that), and is not checked.
+# Phase 3 includes the ring outside the last rung, which the length bound needs.
 
 # --- public interface ----------------------------------------------------
 
@@ -358,11 +360,20 @@ function _ladder_cycle(
         end
     end
 
+    # The heavy ring lies between two rungs, inside the first rung (heavy = 1), or,
+    # when every rung is light, outside the last one (heavy = k + 1): the case of
+    # the trivial outermost cycle. Its two pieces are cut by the fundamental
+    # cycle, which crosses the ring, so the outside is empty and a piece with a
+    # third of the faces exists.
     heavy = findfirst(j -> inside[j] < nf / 3 && inside[j+1] > 2nf / 3, 1:k)
-    heavy === nothing && return Int[]
+    if heavy === nothing
+        (k >= 1 && inside[k+1] < nf / 3) || return Int[]
+        heavy = k + 1
+    end
     parts =
         (inner = BitVector(index .< heavy - 1), annulus = BitVector(index .== heavy - 1))
-    return _heavy_ring_cycle(h, faces, fundamental, ladder_cycles[heavy][1], parts)
+    seed = ladder_cycles[min(heavy, k)][1]
+    return _heavy_ring_cycle(h, faces, fundamental, seed, parts)
 end
 
 # Number of the ladder ring that contains each face: 0 inside the innermost

@@ -77,6 +77,29 @@ end
         end
     end
 
+    @testset "phases 2 and 3 with a small step" begin
+        # With the default step the fundamental cycle of a small triangulation is
+        # already short, so the ladder is never reached; a small step forces it.
+        for n in (30, 100, 400), delta in (2, 3, 5), seed = 1:3
+            g = random_triangulation(n; rng = MersenneTwister(seed))
+            C = BasicPlanarGraphs._cycle_separator(BasicPlanarGraphs.DartGraph(g); delta)
+            check_cycle(g, C; simple = true)
+        end
+    end
+
+    @testset "a heavy ring outside the last rung" begin
+        # Every rung of the ladder is light, because more than two thirds of the
+        # faces lie beyond the last one; the paper cuts the outermost ring. Without
+        # that case the answer was the fundamental cycle, of length 2L + 4.
+        for (L, q) in ((50, 125), (200, 500), (800, 2000))
+            g = tube_blob(L, q)
+            @test ne(g) == 3nv(g) - 6
+            C = cycle_separator(g)
+            check_cycle(g, C; simple = true)
+            @test length(C) <= 2 * sqrt(2 * nv(g)) + 1
+        end
+    end
+
     @testset "cycle_sides convention" begin
         g = planar_wheel(10)
         C = cycle_separator(g)
