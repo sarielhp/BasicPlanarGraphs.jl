@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `five_coloring(g)`: a proper vertex coloring of a planar `SimpleGraph` or
+  `PlanarGraph` with the colors `1:5` (Matula–Shiloach–Tarjan), and
+  `is_proper_coloring(g, colors)`. Near linear in practice; linear time is not
+  proved. Non-planarity is reported only when the method gets stuck.
+
 ## [0.2.5] - 2026-10-25
 
 ### Fixed

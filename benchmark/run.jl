@@ -101,6 +101,7 @@ function operations(g, reps, title)
     row("grid_drawing", g, () -> grid_drawing(g), reps)
     row("cycle_separator", g, () -> cycle_separator(g), reps)
     sg = g.graph
+    row("five_coloring", sg, () -> five_coloring(sg), reps)
     row("planar_embedding(Simple)", sg, () -> planar_embedding(sg), reps)
     row("is_planar_linear(Simple)", sg, () -> is_planar_linear(sg), reps)
     println()

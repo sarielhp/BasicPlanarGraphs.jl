@@ -23,6 +23,7 @@ export separator_partition, SeparatorPartition
 export planar_path, planar_cycle, planar_grid, planar_wheel, random_triangulation
 export write_planar_graph, read_planar_graph, write_graph, read_graph
 export is_planar, is_planar_linear, planar_embedding
+export five_coloring, is_proper_coloring
 export grid_drawing, GridDrawing, coordinates, width, height
 
 include("embedded.jl")
@@ -36,5 +37,6 @@ include("generators.jl")
 include("graph_io.jl")
 include("planarity.jl")
 include("grid_drawing.jl")
+include("coloring.jl")
 
 end

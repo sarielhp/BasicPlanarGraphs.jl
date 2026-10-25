@@ -147,6 +147,15 @@ time. Fields `separator`, `parts`, `part_of`, and with `subgraphs = true`
 `local_index` and `graphs`. `r < 1` or a non-planar rotation system is an
 `ArgumentError`. See [Separator partition](partition.md).
 
+## Coloring
+
+### `five_coloring(g) -> Vector{Int}`
+
+Proper coloring with the colors `1:5` of a planar `SimpleGraph` or `PlanarGraph`
+(edges only), disconnected graphs included. `ArgumentError` when the method gets
+stuck, which proves non-planarity. `is_proper_coloring(g, colors)` checks any
+coloring. See [Coloring](coloring.md).
+
 ## Cycle separator
 
 ### `cycle_separator(g) -> Vector{Int}`
@@ -288,6 +297,8 @@ return are `Vector{Int}` whatever the vertex type of the graph.
 | `triangulate` | operation | `PlanarGraph` |
 | `separator` | algorithm | `Tuple{Vector,Vector,Vector}` |
 | `separator_partition`, `SeparatorPartition` | algorithm / result | `SeparatorPartition` |
+| `five_coloring` | algorithm | `Vector{Int}` |
+| `is_proper_coloring` | query | `Bool` |
 | `cycle_separator` | algorithm | `Vector` |
 | `cycle_sides` | query | `Tuple{Vector,Vector}` |
 | `planar_path`, `planar_cycle`, `planar_grid`, `planar_wheel`, `random_triangulation` | generators | `PlanarGraph` |
