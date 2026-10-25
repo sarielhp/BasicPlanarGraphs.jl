@@ -21,6 +21,7 @@ for what that means in practice.
 | [Grid drawing](drawing.md) | `grid_drawing`, the `GridDrawing` type, the grid-size bounds, and the Fraysseix–Pach–Pollack placement. |
 | [Separator](separator.md) | What `separator` guarantees, the Lipton–Tarjan stages, pruning, disconnected inputs, and complexity. |
 | [Cycle separator](cycle_separator.md) | `cycle_separator` and `cycle_sides`: the balanced closed walk, the left/right convention, the phases, and lifting a triangulation's cycle to the input. |
+| [r-division](r_division.md) | `r_division`: regions of at most `r` vertices with small boundaries, its guarantees and cost. |
 | [Coloring](coloring.md) | `five_coloring` and `is_proper_coloring`: the method, guarantees, and cost. |
 | [Separator partition](partition.md) | `separator_partition`: the recursive separator partition, its guarantees, and its cost. |
 | [Generators and triangulation](generators.md) | `planar_path`, `planar_cycle`, `planar_grid`, `planar_wheel`, `random_triangulation`, and `triangulate`. |

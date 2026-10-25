@@ -18,6 +18,8 @@ include("helpers.jl")
     include("planarity_test.jl")
     include("drawing_test.jl")
     include("coloring_test.jl")
+    include("edits_test.jl")
+    include("r_division_test.jl")
 
     @testset "Aqua" begin
         Aqua.test_all(BasicPlanarGraphs)

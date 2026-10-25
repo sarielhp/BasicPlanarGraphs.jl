@@ -44,6 +44,7 @@ Full documentation lives in [`docs/`](docs/README.md):
 | [Planarity and embedding](docs/planarity.md) | `is_planar_linear`, `planar_embedding`, the Left-Right test, what an embedding guarantees |
 | [Grid drawing](docs/drawing.md) | `grid_drawing`, `GridDrawing`, grid-size bounds, the Fraysseix–Pach–Pollack placement |
 | [Separator](docs/separator.md) | guarantees, the Lipton–Tarjan stages, pruning, disconnected inputs, complexity |
+| [r-division](docs/r_division.md) | `r_division`, regions of at most `r` vertices with boundaries of `O(sqrt r)` vertices |
 | [Coloring](docs/coloring.md) | `five_coloring`, a proper 5-coloring of a planar graph, and `is_proper_coloring` |
 | [Separator partition](docs/partition.md) | `separator_partition`, the recursive partition into parts of at most `r` vertices, guarantees and cost |
 | [Cycle separator](docs/cycle_separator.md) | guarantees, the left/right convention, the Har-Peled–Nayyeri phases, lifting to closed walks |

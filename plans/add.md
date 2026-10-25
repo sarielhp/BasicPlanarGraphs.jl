@@ -1,7 +1,8 @@
 # Possible additions
 
-Status: 1 (five-coloring, v0.2.6) and 2 (weighted `separator`; not
-`separator_partition`) are done; the rest are proposals. Written 2026-10-24 after the v0.2.4 release,
+Status: five-coloring (v0.2.6), weighted `separator` (v0.2.7; not
+`separator_partition`), a true r-division, embedding-preserving edits and
+`PlanarGraph <: AbstractGraph` are done; the rest are proposals. Written 2026-10-24 after the v0.2.4 release,
 while the independent review of the separator, cycle separator and triangulation
 code was still open; revisit after its findings are fixed.
 

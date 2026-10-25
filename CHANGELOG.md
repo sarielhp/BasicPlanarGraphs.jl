@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `PlanarGraph{T}` is now an `AbstractGraph{T}`: `connected_components`, `bfs_parents`,
+  `dijkstra_shortest_paths` and the other read-only `Graphs.jl` algorithms accept it.
+  `Graphs.rem_edge!` works. Functions that build a new graph of the same type
+  (`induced_subgraph`, `complement`) are not supported.
+- `delete_edge!`, `contract_edge!` and `add_edge_in_face!`: in-place edits that keep
+  the embedding.
+- `r_division(g, r)` and `RDivision`: regions of at most `r` vertices (`r >= 100`) with
+  at most `12 sqrt(r)` boundary vertices each; the number of regions and the total
+  boundary are measured, not proved (`docs/r_division.md`).
+
 ## [0.2.7] - 2026-10-25
 
 ### Added

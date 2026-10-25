@@ -47,6 +47,9 @@ its generators.
 | `separator_partition_test.jl` | the seven guarantees on structured, random, sparse, disconnected and isolated-vertex graphs, threshold extremes, determinism and immutability, the induced-graph option |
 | `planarity_test.jl` | `is_planar` and `planar_embedding` against `Graphs.is_planar` on random graphs and the classical obstructions, Euler's formula on the result, recomputation of broken rotations, edge and vertex preservation, linear scaling |
 | `drawing_test.jl` | integer coordinates inside the bounding box, distinct positions, no vertex on an edge, no crossing edges, the `2n-4 × (n-2)` bounds, components, trivial graphs, rejection of non-planar input |
+| `coloring_test.jl` | proper 5-colorings checked edge by edge on the icosahedron, triangulations, thinned and disconnected graphs, tiny and `Int32` graphs, `K6`/`K8` rejected, running time |
+| `edits_test.jl` | `delete_edge!`, `contract_edge!` (against plain edge-list contraction) and `add_edge_in_face!` (every pair of corners of small graphs), and the `Graphs.jl` algorithms on a `PlanarGraph` |
+| `r_division_test.jl` | the guarantees of `r_division` on structured, random, sparse, hub and disconnected graphs, the boundary phase forced on a fully shared piece, running time |
 | `graph_io_test.jl` | round trips for embedded and bare graphs, the file format, isolated vertices and empty graphs, every rejected input |
 | `scaling_test.jl` | quadrupling `n` does not blow up the running time (generous factor for loaded machines) |
 

@@ -34,10 +34,19 @@ vertex); `hash` agrees with it (it looks at the graph only, which equal embeddin
 
 ### `nv(g)`, `ne(g)`, `vertices(g)`, `edges(g)`, `neighbors(g, v)`, `degree(g, v)`, `has_edge(g, u, v)`
 
-`Graphs.jl` interface, forwarded to the wrapped graph: exactly the seven functions
-listed. A `PlanarGraph` is not an `AbstractGraph`, so other `Graphs.jl` functions
-(`connected_components`, `bfs_parents`, …) do not accept it; pass `g.graph`, the
-wrapped `SimpleGraph`, to them.
+`Graphs.jl` interface, forwarded to the wrapped graph. A `PlanarGraph{T}` is an
+`AbstractGraph{T}` (undirected; `has_vertex`, `inneighbors`, `outneighbors`,
+`edgetype` and `is_directed` are forwarded too), so `connected_components`,
+`bfs_parents`, `dijkstra_shortest_paths`, `adjacency_matrix` and the other read-only
+`Graphs.jl` algorithms accept it. Functions that build a graph of the same type
+(`induced_subgraph`, `complement`) are not supported: pass `g.graph` to them.
+`Graphs.rem_edge!` works and keeps the embedding.
+
+### `delete_edge!(g, u, v)`, `contract_edge!(g, u, v)`, `add_edge_in_face!(g, u, v; after_u, after_v)`
+
+Edits that keep the embedding, in place, returning `g`; vertex numbers never change
+(a contracted vertex stays, isolated). `ArgumentError` for a missing edge, an unknown
+vertex, or corners that are not on one face. See [Embedding](embedding.md#edits).
 
 ### `neighbor_order(g, v) -> Vector{T}`
 
@@ -157,6 +166,15 @@ Proper coloring with the colors `1:5` of a planar `SimpleGraph` or `PlanarGraph`
 (edges only), disconnected graphs included. `ArgumentError` when the method gets
 stuck, which proves non-planarity. `is_proper_coloring(g, colors)` checks any
 coloring. See [Coloring](coloring.md).
+
+## r-division
+
+### `r_division(g, r) -> RDivision`
+
+Regions of at most `r` vertices (`r >= 100`), each with at most `12 sqrt(r)` boundary
+vertices shared with other regions; `O(n/r)` regions and `O(n/sqrt(r))` boundary
+vertices (measured). Fields `regions`, `boundary`, `region_of`, `boundary_vertices`.
+See [r-division](r_division.md).
 
 ## Cycle separator
 
@@ -297,6 +315,8 @@ return are `Vector{Int}` whatever the vertex type of the graph.
 | `coordinates`, `width`, `height` | drawing query | positions and bounding box |
 | `dual` | operation | `PlanarGraph` |
 | `triangulate` | operation | `PlanarGraph` |
+| `delete_edge!`, `contract_edge!`, `add_edge_in_face!` | edit | `PlanarGraph` (same object) |
+| `r_division`, `RDivision` | algorithm / result | `RDivision` |
 | `separator` | algorithm | `Tuple{Vector,Vector,Vector}` |
 | `separator_partition`, `SeparatorPartition` | algorithm / result | `SeparatorPartition` |
 | `five_coloring` | algorithm | `Vector{Int}` |

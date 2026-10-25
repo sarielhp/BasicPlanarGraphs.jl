@@ -12,6 +12,13 @@ the counter-clockwise cyclic order of the neighbours of every vertex
 constructor validates this. Use [`is_planar_embedding`](@ref) to query the
 embedding check explicitly.
 
+A `PlanarGraph` is a `Graphs.jl` `AbstractGraph` (undirected, read-only through the
+generic interface), so the algorithms of `Graphs.jl` accept it: `connected_components`,
+`bfs_parents`, `dijkstra_shortest_paths`, `greedy_color`, `adjacency_matrix`, and so
+on. Functions that build a new graph of the same type (`induced_subgraph`, `complement`)
+are not supported; use `g.graph` for those. The mutating `Graphs.rem_edge!` is, and
+keeps the embedding; see [`delete_edge!`](@ref).
+
 ```julia
 g = PlanarGraph([[2, 3], [3, 1], [1, 2]])   # triangle, counter-clockwise
 nv(g), ne(g), nfaces(g)
@@ -21,7 +28,7 @@ Two embeddings are equal when they have the same underlying graph and their
 rotations agree up to a cyclic shift and reversal at every vertex, that is
 when they describe the same embedding of the same graph.
 """
-struct PlanarGraph{T<:Integer}
+struct PlanarGraph{T<:Integer} <: AbstractGraph{T}
     graph::SimpleGraph{T}
     rotation::Vector{Vector{T}}
 
@@ -127,6 +134,11 @@ Graphs.edges(g::PlanarGraph) = edges(g.graph)
 Graphs.neighbors(g::PlanarGraph, v::Integer) = neighbors(g.graph, v)
 Graphs.degree(g::PlanarGraph, v::Integer) = degree(g.graph, v)
 Graphs.has_edge(g::PlanarGraph, u::Integer, v::Integer) = has_edge(g.graph, u, v)
+Graphs.has_vertex(g::PlanarGraph, v::Integer) = Graphs.has_vertex(g.graph, v)
+Graphs.is_directed(::Type{<:PlanarGraph}) = false
+Graphs.edgetype(::PlanarGraph{T}) where {T} = Graphs.SimpleEdge{T}
+Graphs.outneighbors(g::PlanarGraph, v::Integer) = neighbors(g.graph, v)
+Graphs.inneighbors(g::PlanarGraph, v::Integer) = neighbors(g.graph, v)
 
 """Neighbours of `v` in counter-clockwise order (the embedding's rotation)."""
 neighbor_order(g::PlanarGraph, v::Integer) = g.rotation[v]
