@@ -1,7 +1,7 @@
 name = "BasicPlanarGraphs"
 uuid = "4a488a8a-cb6f-4e41-b17f-f8c1443f9c10"
 authors = ["sariel"]
-version = "0.2.11"
+version = "0.2.12"
 license = "MIT"
 
 [deps]
