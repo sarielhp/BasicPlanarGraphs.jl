@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `separator_hierarchy(g)` / `separator_hierarchy(rotations)`: vertex-disjoint recursive
+  balanced-separator hierarchy in preorder, with owner labels and O(1) routing by
+  `child_containing(h, t, label)`. Optional `validate = true` checks Euler's formula.
+
 ## [0.2.10] - 2026-10-25
 
 ### Changed
