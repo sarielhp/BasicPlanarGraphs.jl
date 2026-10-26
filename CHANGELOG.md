@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `simplify_embedding(rotations, edges; universe_size)` and `simplify_embedding_sparse`:
+  drop loops and keep the minimum-key edge of each parallel class, filtering the supplied
+  rotations without reordering and keeping original incidence IDs. Dense entry is
+  `O(n + m + U)` (counting sorts); sparse entry is `O(n + m log(m+2))` with no storage
+  depending on ID magnitude. Result `.neighbors` feeds `separator_hierarchy`.
+
 ## [0.2.11] - 2026-10-26
 
 ### Added

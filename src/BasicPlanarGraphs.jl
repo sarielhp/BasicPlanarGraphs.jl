@@ -22,6 +22,7 @@ export delete_edge!, contract_edge!, add_edge_in_face!
 export triangulate, separator, cycle_separator, cycle_sides
 export separator_partition, SeparatorPartition, r_division, RDivision
 export separator_hierarchy, SeparatorHierarchy, HierarchyNode, child_containing
+export IncidenceEdge, SimplifiedEmbedding, simplify_embedding, simplify_embedding_sparse
 export planar_path, planar_cycle, planar_grid, planar_wheel, random_triangulation
 export write_planar_graph, read_planar_graph, write_graph, read_graph
 export is_planar, is_planar_linear, planar_embedding
@@ -35,6 +36,7 @@ include("triangulate.jl")
 include("separator.jl")
 include("separator_partition.jl")
 include("separator_hierarchy.jl")
+include("simplify_embedding.jl")
 include("r_division.jl")
 include("cycle_separator.jl")
 include("cycle_walk.jl")
